@@ -1,0 +1,515 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Accelerator Exporter",
+  "description": "部署统一 GPU、NPU、vGPU、vNPU 指标聚合服务。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "replicaCount",
+    "image",
+    "config",
+    "serviceAccount",
+    "rbac",
+    "containerPort",
+    "service",
+    "metrics"
+  ],
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "title": "副本数",
+      "minimum": 1,
+      "default": 1
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3
+    },
+    "image": {
+      "type": "object",
+      "title": "镜像配置",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "default": []
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "config": {
+      "type": "object",
+      "title": "采集配置",
+      "description": "配置静态地址或 PodMonitor/ServiceMonitor 风格的动态目标发现。",
+      "additionalProperties": false,
+      "required": ["scrapeInterval", "scrapeTimeout", "maxConcurrency", "sources"],
+      "properties": {
+        "scrapeInterval": {
+          "type": "string",
+          "title": "采集间隔",
+          "minLength": 2,
+          "default": "15s"
+        },
+        "scrapeTimeout": {
+          "type": "string",
+          "title": "单目标超时",
+          "minLength": 2,
+          "default": "5s"
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "title": "最大并发采集数",
+          "minimum": 1,
+          "default": 8
+        },
+        "sources": {
+          "type": "array",
+          "title": "底层指标源",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/source"
+          }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "annotations", "name"],
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create"],
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object"
+    },
+    "containerPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 9400
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "port", "annotations"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP"],
+          "default": "ClusterIP"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 9400
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceMonitor"],
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "title": "Prometheus ServiceMonitor",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "namespace",
+            "interval",
+            "scrapeTimeout",
+            "additionalLabels",
+            "relabelings",
+            "metricRelabelings"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "interval": {
+              "type": "string",
+              "minLength": 2,
+              "default": "30s"
+            },
+            "scrapeTimeout": {
+              "type": "string",
+              "minLength": 2,
+              "default": "10s"
+            },
+            "additionalLabels": {
+              "$ref": "#/definitions/stringMap"
+            },
+            "relabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "metricRelabelings": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "livenessProbe": {
+      "$ref": "#/definitions/probe"
+    },
+    "readinessProbe": {
+      "$ref": "#/definitions/probe"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "extraArgs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "definitions": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialDelaySeconds", "periodSeconds", "timeoutSeconds", "failureThreshold"],
+      "properties": {
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "acceleratorType"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "acceleratorType": {
+          "type": "string",
+          "enum": ["gpu", "npu", "vgpu", "vnpu"]
+        },
+        "labels": {
+          "$ref": "#/definitions/sourceLabels"
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^https?://.+"
+        },
+        "podMonitor": {
+          "$ref": "#/definitions/monitor"
+        },
+        "serviceMonitor": {
+          "$ref": "#/definitions/monitor"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["address"],
+          "not": {
+            "anyOf": [
+              {"required": ["podMonitor"]},
+              {"required": ["serviceMonitor"]}
+            ]
+          }
+        },
+        {
+          "required": ["podMonitor"],
+          "not": {
+            "anyOf": [
+              {"required": ["address"]},
+              {"required": ["serviceMonitor"]}
+            ]
+          }
+        },
+        {
+          "required": ["serviceMonitor"],
+          "not": {
+            "anyOf": [
+              {"required": ["address"]},
+              {"required": ["podMonitor"]}
+            ]
+          }
+        }
+      ]
+    },
+    "monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceSelector", "selector", "port"],
+      "properties": {
+        "namespaceSelector": {
+          "$ref": "#/definitions/namespaceSelector"
+        },
+        "selector": {
+          "$ref": "#/definitions/labelSelector"
+        },
+        "port": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 15
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/metrics"
+        },
+        "scheme": {
+          "type": "string",
+          "enum": ["http", "https"],
+          "default": "http"
+        }
+      }
+    },
+    "sourceLabels": {
+      "type": "object",
+      "propertyNames": {
+        "allOf": [
+          {"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"},
+          {"not": {"const": "accelerator_type"}}
+        ]
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "namespaceSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "type": "boolean"
+        },
+        "matchNames": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["any"],
+          "properties": {
+            "any": {"const": true}
+          },
+          "not": {"required": ["matchNames"]}
+        },
+        {
+          "required": ["matchNames"],
+          "not": {
+            "required": ["any"],
+            "properties": {
+              "any": {"const": true}
+            }
+          }
+        }
+      ]
+    },
+    "labelSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/labelSelectorRequirement"
+          }
+        }
+      },
+      "anyOf": [
+        {"required": ["matchLabels"]},
+        {"required": ["matchExpressions"]}
+      ]
+    },
+    "labelSelectorRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "operator"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["In", "NotIn", "Exists", "DoesNotExist"]
+        },
+        "values": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {"enum": ["In", "NotIn"]}
+            }
+          },
+          "then": {
+            "required": ["values"],
+            "properties": {
+              "values": {"minItems": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {"enum": ["Exists", "DoesNotExist"]}
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {"maxItems": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

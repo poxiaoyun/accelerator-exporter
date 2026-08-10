@@ -1,0 +1,13 @@
+config:
+  sources:
+    - name: invalid
+      acceleratorType: gpu
+      address: http://gpu:9400/metrics
+      podMonitor:
+        namespaceSelector:
+          matchNames:
+            - gpu-operator
+        selector:
+          matchLabels:
+            app: dcgm
+        port: metrics

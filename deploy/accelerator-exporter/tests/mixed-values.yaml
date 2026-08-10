@@ -1,0 +1,46 @@
+fullnameOverride: accelerator-mixed
+
+image:
+  tag: regression
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    additionalLabels:
+      prometheus: platform
+
+config:
+  scrapeInterval: 20s
+  scrapeTimeout: 7s
+  maxConcurrency: 12
+  sources:
+    - name: static-gpu
+      acceleratorType: gpu
+      address: https://gpu.example.test/metrics
+    - name: vgpu-any-namespace
+      acceleratorType: vgpu
+      podMonitor:
+        namespaceSelector:
+          any: true
+        selector:
+          matchExpressions:
+            - key: accelerator-metrics
+              operator: In
+              values:
+                - enabled
+        port: 9394
+    - name: npu-services
+      acceleratorType: npu
+      labels:
+        vendor: huawei
+      serviceMonitor:
+        namespaceSelector:
+          matchNames:
+            - npu-exporter
+        selector:
+          matchLabels:
+            app: npu-exporter
+        port: http
+        path: /custom-metrics
+        scheme: http

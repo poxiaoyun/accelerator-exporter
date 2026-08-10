@@ -1,0 +1,140 @@
+replicaCount: 1
+revisionHistoryLimit: 3
+
+image:
+  repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
+  tag: main
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+config:
+  scrapeInterval: 15s
+  scrapeTimeout: 5s
+  maxConcurrency: 8
+  sources:
+    - name: dcgm-pods
+      acceleratorType: gpu
+      podMonitor:
+        namespaceSelector:
+          matchNames:
+            - gpu-operator
+        selector:
+          matchLabels:
+            app: nvidia-dcgm-exporter
+        port: metrics
+        path: /metrics
+        scheme: http
+
+    - name: vgpu-pods
+      acceleratorType: vgpu
+      podMonitor:
+        namespaceSelector:
+          matchNames:
+            - volcano-system
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: volcano-device-plugin
+            app.kubernetes.io/component: volcano-vgpu-device-plugin
+        port: metrics
+        path: /metrics
+        scheme: http
+
+    - name: npu-services
+      acceleratorType: npu
+      serviceMonitor:
+        namespaceSelector:
+          matchNames:
+            - npu-exporter
+        selector:
+          matchLabels:
+            app.kubernetes.io/component: npu-exporter
+        port: http
+        path: /metrics
+        scheme: http
+
+    - name: vnpu-services
+      acceleratorType: vnpu
+      serviceMonitor:
+        namespaceSelector:
+          matchNames:
+            - npu-exporter
+        selector:
+          matchLabels:
+            app.kubernetes.io/component: npu-exporter
+        port: http
+        path: /metrics
+        scheme: http
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+
+containerPort: 9400
+
+service:
+  type: ClusterIP
+  port: 9400
+  annotations: {}
+
+metrics:
+  serviceMonitor:
+    # Requires the monitoring.coreos.com/v1 ServiceMonitor CRD.
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    additionalLabels: {}
+    relabelings: []
+    metricRelabelings: []
+
+livenessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 30
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  initialDelaySeconds: 2
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraArgs: []
