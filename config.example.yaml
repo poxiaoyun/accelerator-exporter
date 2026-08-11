@@ -1,12 +1,11 @@
 listenAddress: ":9400"
-scrapeInterval: 15s
-scrapeTimeout: 5s
+scrapeInterval: 30s
+scrapeTimeout: 10s
 maxConcurrency: 8
 
 # Local development only. In a cluster, omit this field to use the Pod's
 # ServiceAccount.
-# kubeconfig: /path/to/kubeconfig
-
+kubeconfig: /Users/kezheng/.kubectl/develop.config
 sources:
   # Static addresses can be listed multiple times.
   - name: gpu-node-a

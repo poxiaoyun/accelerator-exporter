@@ -15,7 +15,16 @@ config:
   scrapeTimeout: 5s
   maxConcurrency: 8
   sources:
-    - name: dcgm-pods
+    - nvidia-dcgm
+    - volcano-vgpu
+    - ascend-npu
+    - ascend-vnpu
+
+  # Internal preset definitions selected by config.sources. These are kept out
+  # of values.schema.json so users only choose the collectors they need.
+  sourceDefinitions:
+    nvidia-dcgm:
+      name: dcgm-service
       acceleratorType: gpu
       podMonitor:
         namespaceSelector:
@@ -24,11 +33,12 @@ config:
         selector:
           matchLabels:
             app: nvidia-dcgm-exporter
-        port: metrics
+        port: gpu-metrics
         path: /metrics
         scheme: http
 
-    - name: vgpu-pods
+    volcano-vgpu:
+      name: vgpu-pods
       acceleratorType: vgpu
       podMonitor:
         namespaceSelector:
@@ -42,7 +52,8 @@ config:
         path: /metrics
         scheme: http
 
-    - name: npu-services
+    ascend-npu:
+      name: npu-services
       acceleratorType: npu
       serviceMonitor:
         namespaceSelector:
@@ -55,7 +66,8 @@ config:
         path: /metrics
         scheme: http
 
-    - name: vnpu-services
+    ascend-vnpu:
+      name: vnpu-services
       acceleratorType: vnpu
       serviceMonitor:
         namespaceSelector:
@@ -67,6 +79,10 @@ config:
         port: http
         path: /metrics
         scheme: http
+
+  # Optional raw exporter source definitions for non-standard installations.
+  # This field is intentionally not exposed in the user-facing schema.
+  customSources: []
 
 serviceAccount:
   create: true

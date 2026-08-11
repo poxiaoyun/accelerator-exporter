@@ -41,9 +41,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
 {{- end }}
 
+{{- define "accelerator-exporter.sources" -}}
+{{- $sources := list -}}
+{{- range $preset := .Values.config.sources -}}
+{{- $source := required (printf "config.sources contains unknown preset %q" $preset) (index $.Values.config.sourceDefinitions $preset) -}}
+{{- $sources = append $sources $source -}}
+{{- end -}}
+{{- range .Values.config.customSources -}}
+{{- $sources = append $sources . -}}
+{{- end -}}
+{{- toYaml $sources -}}
+{{- end }}
+
 {{- define "accelerator-exporter.kubernetesDiscoveryEnabled" -}}
 {{- $enabled := false -}}
-{{- range .Values.config.sources -}}
+{{- range (include "accelerator-exporter.sources" . | fromYamlArray) -}}
 {{- if or (hasKey . "podMonitor") (hasKey . "serviceMonitor") -}}
 {{- $enabled = true -}}
 {{- end -}}
