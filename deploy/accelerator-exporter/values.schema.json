@@ -59,7 +59,7 @@
           "title": "采集间隔",
           "description": "重新发现并采集全部指标源的时间间隔。",
           "minLength": 2,
-          "default": "15s",
+          "default": "30s",
           "x-cols": 6
         },
         "scrapeTimeout": {
@@ -67,7 +67,7 @@
           "title": "单目标超时",
           "description": "单个指标端点一次请求允许的最长时间。",
           "minLength": 2,
-          "default": "5s",
+          "default": "10s",
           "x-cols": 6
         },
         "maxConcurrency": {

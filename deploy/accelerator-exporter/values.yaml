@@ -11,8 +11,8 @@ nameOverride: ""
 fullnameOverride: ""
 
 config:
-  scrapeInterval: 15s
-  scrapeTimeout: 5s
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
   maxConcurrency: 8
   sources:
     - nvidia-dcgm
@@ -26,7 +26,7 @@ config:
     nvidia-dcgm:
       name: dcgm-service
       acceleratorType: gpu
-      podMonitor:
+      serviceMonitor:
         namespaceSelector:
           matchNames:
             - gpu-operator
@@ -46,9 +46,8 @@ config:
             - volcano-system
         selector:
           matchLabels:
-            app.kubernetes.io/name: volcano-device-plugin
-            app.kubernetes.io/component: volcano-vgpu-device-plugin
-        port: metrics
+            name: volcano-device-plugin
+        port: 9394
         path: /metrics
         scheme: http
 
@@ -61,8 +60,8 @@ config:
             - npu-exporter
         selector:
           matchLabels:
-            app.kubernetes.io/component: npu-exporter
-        port: http
+            app: npu-exporter
+        port: http-metrics
         path: /metrics
         scheme: http
 
@@ -75,8 +74,8 @@ config:
             - npu-exporter
         selector:
           matchLabels:
-            app.kubernetes.io/component: npu-exporter
-        port: http
+            app: npu-exporter
+        port: http-metrics
         path: /metrics
         scheme: http
 
