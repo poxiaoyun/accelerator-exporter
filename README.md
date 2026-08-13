@@ -108,18 +108,56 @@ HTTP 端点：
 
 ## 指标口径
 
-目前统一暴露：
+统一指标契约包含：
 
-- `accelerator_info`
-- `accelerator_core_utilization_percentage`
-- `accelerator_memory_bandwidth_utilization_percentage`
-- `accelerator_memory_total_bytes`
-- `accelerator_memory_used_bytes`
-- `accelerator_memory_free_bytes`
-- `accelerator_memory_utilization_percentage`
-- `accelerator_temperature_celsius`
-- `accelerator_power_usage_watts`
-- `accelerator_power_limit_watts`
+- 设备与分配：`accelerator_info`、`accelerator_total_count`、
+  `accelerator_used_count`、`accelerator_share_percentage`、
+  `accelerator_partition_total_count`
+- 利用率：`accelerator_core_utilization_percentage`、
+  `accelerator_memory_bandwidth_utilization_percentage`、
+  `accelerator_io_utilization_percentage`、
+  `accelerator_overall_utilization_percentage`
+- 显存：`accelerator_memory_total_bytes`、`accelerator_memory_used_bytes`、
+  `accelerator_memory_free_bytes`、`accelerator_memory_utilization_percentage`、
+  `accelerator_memory_oom_total_count`
+- 健康与功耗：`accelerator_health_status`、
+  `accelerator_temperature_celsius`、`accelerator_power_usage_watts`、
+  `accelerator_power_limit_watts`、`accelerator_throttle_reason_info`、
+  `accelerator_error_total_count`
+- AI workload：`accelerator_operations_total_count`、
+  `accelerator_operations_per_second`、`accelerator_batch_size_count`、
+  `accelerator_latency_seconds`、`accelerator_queue_depth_count`
+
+所有统一名称都支持 canonical 透传：自定义采集源已经暴露上述 `accelerator_*`
+指标时，exporter 会校验并补全统一身份标签后继续暴露。
+
+内置厂商映射和严格派生目前可以直接生产：
+
+- `accelerator_info` 和 `accelerator_total_count`：从任意有效设备样本派生，每个设备或
+  分区的值为 1
+- `accelerator_used_count`：工作负载标签存在时值为 1；物理 NPU 使用
+  `npu_chip_info_process_info_num > 0` 判断
+- `accelerator_partition_total_count`：每个带 `partition` 标签的设备样本值为 1
+- `accelerator_share_percentage`：vGPU memory limit 除以物理 GPU 总显存，带
+  `share_basis="memory"` 标签
+- core、显存、温度和功耗指标：使用下方厂商映射
+- `accelerator_health_status`：1 表示健康，0 表示不健康；GPU 优先使用
+  `DCGM_EXP_GPU_HEALTH_STATUS` 的逐项健康检查，未启用时仍可根据
+  `DCGM_FI_DEV_XID_ERRORS == 0` 和 `DCGM_FI_DEV_ROW_REMAP_FAILURE == 0`
+  判断，NPU 使用 `npu_chip_info_health_status`
+- `accelerator_throttle_reason_info`：使用
+  `DCGM_EXP_CLOCK_EVENTS_COUNT`，按 `reason` 输出最近采集窗口内出现过的降频原因
+- `accelerator_error_total_count`：使用 NVIDIA XID/ECC/退役页/重映射行/PCIe/NVLink
+  和 Ascend HBM ECC/RoCE/MAC 的累计错误指标，按 `error_type` 区分
+
+`io_utilization`、`overall_utilization`、`memory_oom`、operations、batch、latency 和
+queue depth 没有跨厂商可靠的设备级派生方式。只有底层采集源提供同名 canonical
+指标时才会输出，不会根据其他利用率伪造数据。
+
+NVIDIA 的 `DCGM_EXP_GPU_HEALTH_STATUS`、`DCGM_EXP_XID_ERRORS_TOTAL`、
+`DCGM_EXP_CLOCK_EVENTS_COUNT` 以及部分 ECC/NVLink 指标可能未在 dcgm-exporter
+默认 collectors 中启用，需要在 DCGM collectors 配置中显式打开后才会产生对应
+统一指标。
 
 显存容量利用率统一由 `used / total * 100` 得出。DCGM 的
 `DCGM_FI_DEV_MEM_COPY_UTIL` 映射为显存带宽利用率，不与显存容量利用率混用。

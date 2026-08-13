@@ -315,8 +315,11 @@ func (e *Exporter) Metrics(writer http.ResponseWriter, _ *http.Request) {
 	lastMetric := ""
 	for _, sample := range current.series {
 		if sample.Name != lastMetric {
-			metadata := canonicalMetrics[sample.Name]
-			_, _ = fmt.Fprintf(writer, "# HELP %s %s\n# TYPE %s gauge\n", sample.Name, metadata, sample.Name)
+			metadata, ok := transform.CanonicalMetric(sample.Name)
+			if !ok {
+				continue
+			}
+			_, _ = fmt.Fprintf(writer, "# HELP %s %s\n# TYPE %s %s\n", sample.Name, metadata.Help, sample.Name, metadata.Type)
 			lastMetric = sample.Name
 		}
 		_, _ = fmt.Fprintf(writer, "%s%s %s\n", sample.Name, formatLabels(sample.Labels), formatFloat(sample.Value))
@@ -340,19 +343,6 @@ func (e *Exporter) Ready(writer http.ResponseWriter, _ *http.Request) {
 	}
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte("ok\n"))
-}
-
-var canonicalMetrics = map[string]string{
-	"accelerator_info":                                    "Static accelerator device information.",
-	"accelerator_core_utilization_percentage":             "Accelerator compute core utilization percentage.",
-	"accelerator_memory_bandwidth_utilization_percentage": "Accelerator memory bandwidth utilization percentage.",
-	"accelerator_memory_total_bytes":                      "Total accelerator memory in bytes.",
-	"accelerator_memory_used_bytes":                       "Used accelerator memory in bytes.",
-	"accelerator_memory_free_bytes":                       "Free accelerator memory in bytes.",
-	"accelerator_memory_utilization_percentage":           "Accelerator memory capacity utilization percentage.",
-	"accelerator_temperature_celsius":                     "Accelerator core temperature in degrees Celsius.",
-	"accelerator_power_usage_watts":                       "Current accelerator power usage in watts.",
-	"accelerator_power_limit_watts":                       "Accelerator enforced power limit in watts.",
 }
 
 func supportedType(acceleratorType string) bool {

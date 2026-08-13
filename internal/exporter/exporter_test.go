@@ -100,6 +100,10 @@ func TestRefreshIsolatesFailedSource(t *testing.T) {
 			t.Errorf("metrics do not contain %q:\n%s", expected, body)
 		}
 	}
+	parser := expfmt.NewTextParser(prometheusmodel.LegacyValidation)
+	if _, err := parser.TextToMetricFamilies(strings.NewReader(body)); err != nil {
+		t.Fatalf("invalid Prometheus exposition: %v\n%s", err, body)
+	}
 }
 
 func TestRefreshDeduplicatesSameNormalizedSeriesByConfigOrder(t *testing.T) {
@@ -120,8 +124,33 @@ func TestRefreshDeduplicatesSameNormalizedSeriesByConfigOrder(t *testing.T) {
 	if !strings.Contains(body, `accelerator_core_utilization_percentage{accelerator_type="gpu",device="0",model="A100",node="node-a",vendor="nvidia"} 10`) {
 		t.Fatalf("first configured source did not win:\n%s", body)
 	}
-	if !strings.Contains(body, "accelerator_exporter_duplicate_samples_total 2") {
+	if !strings.Contains(body, "accelerator_exporter_duplicate_samples_total 3") {
 		t.Fatalf("duplicate counter missing:\n%s", body)
+	}
+}
+
+func TestMetricsUsesCanonicalCounterType(t *testing.T) {
+	t.Parallel()
+	labels := map[string]string{"Hostname": "node-a", "UUID": "GPU-1", "modelName": "A100", "xid": "31"}
+	scraper := &fakeScraper{results: map[string]model.Families{
+		"http://gpu/metrics": {
+			"DCGM_EXP_XID_ERRORS_TOTAL": {{Labels: labels, Value: 2}},
+		},
+	}, errors: map[string]error{}}
+	metricExporter := newTestExporter(t, scraper, []model.Source{{
+		Name: "gpu", Address: "http://gpu/metrics", AcceleratorType: model.AcceleratorTypeGPU,
+	}})
+	if err := metricExporter.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	body := metricsBody(metricExporter)
+	for _, expected := range []string{
+		"# TYPE accelerator_error_total_count counter",
+		`accelerator_error_total_count{accelerator_type="gpu",device="GPU-1",error_code="31",error_type="xid",model="A100",node="node-a",uuid="GPU-1",vendor="nvidia"} 2`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("metrics do not contain %q:\n%s", expected, body)
+		}
 	}
 }
 
