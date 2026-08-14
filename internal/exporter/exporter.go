@@ -26,7 +26,7 @@ type Scraper interface {
 	Scrape(context.Context, string) (model.Families, error)
 }
 
-// TargetProvider resolves configured static and dynamic source definitions.
+// TargetProvider resolves Kubernetes-discovered source definitions.
 type TargetProvider interface {
 	Targets(context.Context) ([]model.Source, error)
 }
@@ -36,7 +36,6 @@ type Options struct {
 	ScrapeInterval time.Duration
 	ScrapeTimeout  time.Duration
 	MaxConcurrency int
-	Sources        []model.Source
 	TargetProvider TargetProvider
 }
 
@@ -90,35 +89,18 @@ func New(scraper Scraper, options Options, logger *slog.Logger) (*Exporter, erro
 	if options.MaxConcurrency < 1 {
 		return nil, fmt.Errorf("max concurrency must be positive")
 	}
-	if len(options.Sources) == 0 && options.TargetProvider == nil {
-		return nil, fmt.Errorf("at least one metrics source is required")
-	}
-	targets := make(map[string]targetState, len(options.Sources))
-	for _, source := range options.Sources {
-		if source.Name == "" || source.Address == "" {
-			return nil, fmt.Errorf("every source requires a name and address")
-		}
-		if _, exists := targets[source.Name]; exists {
-			return nil, fmt.Errorf("duplicate source name %q", source.Name)
-		}
-		if !supportedType(source.AcceleratorType) {
-			return nil, fmt.Errorf("source %q has unsupported accelerator type %q", source.Name, source.AcceleratorType)
-		}
-		targets[source.Name] = targetState{acceleratorType: source.AcceleratorType}
+	if options.TargetProvider == nil {
+		return nil, fmt.Errorf("target provider is required")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	provider := options.TargetProvider
-	if provider == nil {
-		provider = staticTargetProvider(append([]model.Source(nil), options.Sources...))
-	}
 	return &Exporter{
 		scraper:  scraper,
-		provider: provider,
+		provider: options.TargetProvider,
 		options:  options,
 		logger:   logger,
-		state:    state{targets: targets},
+		state:    state{targets: map[string]targetState{}},
 	}, nil
 }
 
@@ -275,11 +257,11 @@ func (e *Exporter) Metrics(writer http.ResponseWriter, _ *http.Request) {
 	}
 	writeGauge(writer, "accelerator_exporter_ready", "Whether at least one configured source was scraped successfully.", boolFloat(current.ready))
 	writeGauge(writer, "accelerator_exporter_last_refresh_success", "Whether every configured source succeeded in the latest refresh.", boolFloat(current.lastRefreshSuccess))
-	writeGauge(writer, "accelerator_exporter_targets_discovered", "Number of static or dynamically discovered accelerator metrics targets.", float64(len(current.targets)))
+	writeGauge(writer, "accelerator_exporter_targets_discovered", "Number of Kubernetes-discovered accelerator metrics targets on this node.", float64(len(current.targets)))
 	writeGauge(writer, "accelerator_exporter_series_exposed", "Number of normalized accelerator series currently exposed.", float64(len(current.series)))
 	writeGauge(writer, "accelerator_exporter_last_refresh_timestamp_seconds", "Unix timestamp of the latest refresh attempt.", lastRefreshTimestamp)
 	writeCounter(writer, "accelerator_exporter_duplicate_samples_total", "Total duplicate normalized samples discarded.", current.duplicateSamplesTotal)
-	writeCounter(writer, "accelerator_exporter_discovery_errors_total", "Total static or Kubernetes target discovery errors.", current.discoveryErrorsTotal)
+	writeCounter(writer, "accelerator_exporter_discovery_errors_total", "Total Kubernetes target discovery errors.", current.discoveryErrorsTotal)
 
 	names := make([]string, 0, len(current.targets))
 	for name := range current.targets {
@@ -368,12 +350,6 @@ func cloneTargetStates(states map[string]targetState) map[string]targetState {
 		cloned[name] = target
 	}
 	return cloned
-}
-
-type staticTargetProvider []model.Source
-
-func (provider staticTargetProvider) Targets(context.Context) ([]model.Source, error) {
-	return append([]model.Source(nil), provider...), nil
 }
 
 func validTargets(sources []model.Source) ([]model.Source, error) {

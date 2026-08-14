@@ -1,5 +1,5 @@
 // Package discovery resolves configured source definitions to concrete metrics
-// addresses. It supports static URLs plus PodMonitor- and ServiceMonitor-style
+// addresses. It supports node-local PodMonitor- and ServiceMonitor-style
 // Kubernetes selection.
 package discovery
 
@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	typeddiscoveryv1 "k8s.io/client-go/kubernetes/typed/discovery/v1"
@@ -28,17 +29,8 @@ type Provider interface {
 	Targets(context.Context) ([]model.Source, error)
 }
 
-// Static returns a provider for explicitly configured addresses.
-func Static(sources []model.Source) Provider {
-	cloned := append([]model.Source(nil), sources...)
-	return providerFunc(func(context.Context) ([]model.Source, error) {
-		return append([]model.Source(nil), cloned...), nil
-	})
-}
-
 // Composite combines multiple providers. Targets returned alongside an error
-// remain usable, allowing static targets to continue if Kubernetes discovery
-// temporarily fails.
+// remain usable when one Kubernetes discovery provider temporarily fails.
 func Composite(providers ...Provider) Provider {
 	return providerFunc(func(ctx context.Context) ([]model.Source, error) {
 		var targets []model.Source
@@ -135,13 +127,18 @@ func (lister *serviceEndpointLister) ListEndpointSlices(ctx context.Context, nam
 // PodProvider discovers every running Pod matching each configured selector.
 type PodProvider struct {
 	lister   PodLister
+	nodeName string
 	monitors []PodMonitor
 }
 
 // NewPodProvider creates a PodMonitor-style target provider.
-func NewPodProvider(lister PodLister, monitors []PodMonitor) (*PodProvider, error) {
+func NewPodProvider(lister PodLister, nodeName string, monitors []PodMonitor) (*PodProvider, error) {
 	if lister == nil {
 		return nil, fmt.Errorf("Pod lister is required")
+	}
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return nil, fmt.Errorf("node name is required")
 	}
 	for _, monitor := range monitors {
 		if monitor.Name == "" || monitor.Port == "" || (len(monitor.Namespaces) == 0 && !monitor.AnyNamespace) {
@@ -151,7 +148,7 @@ func NewPodProvider(lister PodLister, monitors []PodMonitor) (*PodProvider, erro
 			return nil, fmt.Errorf("Pod monitor %q selector: %w", monitor.Name, err)
 		}
 	}
-	return &PodProvider{lister: lister, monitors: append([]PodMonitor(nil), monitors...)}, nil
+	return &PodProvider{lister: lister, nodeName: nodeName, monitors: append([]PodMonitor(nil), monitors...)}, nil
 }
 
 // Targets resolves matching running Pods to direct Pod-IP metrics URLs.
@@ -165,14 +162,17 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error
 			continue
 		}
 		for _, namespace := range monitorNamespaces(monitor.Namespaces, monitor.AnyNamespace) {
-			pods, err := provider.lister.ListPods(ctx, namespace, metav1.ListOptions{LabelSelector: selector.String()})
+			pods, err := provider.lister.ListPods(ctx, namespace, metav1.ListOptions{
+				LabelSelector: selector.String(),
+				FieldSelector: fields.OneTermEqualSelector("spec.nodeName", provider.nodeName).String(),
+			})
 			if err != nil {
 				discoveryErrors = append(discoveryErrors, fmt.Errorf("Pod monitor %q list namespace %q: %w", monitor.Name, namespace, err))
 				continue
 			}
 			for index := range pods.Items {
 				pod := &pods.Items[index]
-				if !podMatches(pod, selector) || pod.Status.Phase != corev1.PodRunning || pod.Status.PodIP == "" {
+				if pod.Spec.NodeName != provider.nodeName || !podMatches(pod, selector) || pod.Status.Phase != corev1.PodRunning || pod.Status.PodIP == "" {
 					continue
 				}
 				port, ok := resolvePort(pod, monitor.Port)
@@ -181,9 +181,7 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error
 					continue
 				}
 				labels := cloneLabels(monitor.Labels)
-				if labels["node"] == "" {
-					labels["node"] = pod.Spec.NodeName
-				}
+				labels["node"] = provider.nodeName
 				endpoint := url.URL{
 					Scheme: monitor.Scheme,
 					Host:   net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(port))),
@@ -206,13 +204,18 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error
 // EndpointSlices so every backend metrics endpoint is scraped directly.
 type ServiceProvider struct {
 	lister   ServiceEndpointLister
+	nodeName string
 	monitors []ServiceMonitor
 }
 
 // NewServiceProvider creates a ServiceMonitor-style target provider.
-func NewServiceProvider(lister ServiceEndpointLister, monitors []ServiceMonitor) (*ServiceProvider, error) {
+func NewServiceProvider(lister ServiceEndpointLister, nodeName string, monitors []ServiceMonitor) (*ServiceProvider, error) {
 	if lister == nil {
 		return nil, fmt.Errorf("Service and EndpointSlice lister is required")
+	}
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return nil, fmt.Errorf("node name is required")
 	}
 	for _, monitor := range monitors {
 		if monitor.Name == "" || monitor.Port == "" || (len(monitor.Namespaces) == 0 && !monitor.AnyNamespace) {
@@ -222,7 +225,7 @@ func NewServiceProvider(lister ServiceEndpointLister, monitors []ServiceMonitor)
 			return nil, fmt.Errorf("Service monitor %q selector: %w", monitor.Name, err)
 		}
 	}
-	return &ServiceProvider{lister: lister, monitors: append([]ServiceMonitor(nil), monitors...)}, nil
+	return &ServiceProvider{lister: lister, nodeName: nodeName, monitors: append([]ServiceMonitor(nil), monitors...)}, nil
 }
 
 // Targets resolves selected Services to ready EndpointSlice addresses.
@@ -271,11 +274,12 @@ func (provider *ServiceProvider) Targets(ctx context.Context) ([]model.Source, e
 						if endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready {
 							continue
 						}
+						if endpoint.NodeName == nil || *endpoint.NodeName != provider.nodeName {
+							continue
+						}
 						for _, address := range endpoint.Addresses {
 							labels := cloneLabels(monitor.Labels)
-							if labels["node"] == "" && endpoint.NodeName != nil {
-								labels["node"] = *endpoint.NodeName
-							}
+							labels["node"] = provider.nodeName
 							metricsURL := url.URL{Scheme: monitor.Scheme, Host: net.JoinHostPort(address, strconv.Itoa(int(endpointPort))), Path: monitor.Path}
 							name := monitor.Name + "/" + service.Namespace + "/" + service.Name + "/" + net.JoinHostPort(address, strconv.Itoa(int(endpointPort)))
 							targetsByName[name] = model.Source{

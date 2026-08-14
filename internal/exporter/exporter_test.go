@@ -154,18 +154,22 @@ func TestMetricsUsesCanonicalCounterType(t *testing.T) {
 	}
 }
 
-func TestNewRejectsNoSourcesAndDuplicateNames(t *testing.T) {
+func TestNewRequiresProviderAndRefreshRejectsDuplicateNames(t *testing.T) {
 	t.Parallel()
 	options := NewDefaultOptions()
 	if _, err := New(&fakeScraper{}, options, nil); err == nil {
-		t.Fatal("expected no sources error")
+		t.Fatal("expected missing provider error")
 	}
-	options.Sources = []model.Source{
+	options.TargetProvider = fakeTargetProvider{targets: []model.Source{
 		{Name: "same", Address: "http://a/metrics", AcceleratorType: model.AcceleratorTypeGPU},
 		{Name: "same", Address: "http://b/metrics", AcceleratorType: model.AcceleratorTypeNPU},
+	}}
+	metricExporter, err := New(&fakeScraper{}, options, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := New(&fakeScraper{}, options, nil); err == nil {
-		t.Fatal("expected duplicate source error")
+	if err := metricExporter.Refresh(context.Background()); err == nil {
+		t.Fatal("expected duplicate discovered target error")
 	}
 }
 
@@ -232,7 +236,7 @@ func newTestExporter(t *testing.T, scraper Scraper, sources []model.Source) *Exp
 	t.Helper()
 	options := NewDefaultOptions()
 	options.ScrapeInterval = time.Hour
-	options.Sources = sources
+	options.TargetProvider = fakeTargetProvider{targets: sources}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	metricExporter, err := New(scraper, options, logger)
 	if err != nil {

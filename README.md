@@ -6,11 +6,14 @@
 
 服务不依赖 Prometheus HTTP API，也不读取 RecordingRule。
 
+Helm Chart 中的 DaemonSet 还会识别当前节点的 CPU 型号，并通过 Kubernetes API 发布为
+Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节点资源发现直接使用。
+
 ## 配置
 
-每个数据源需要唯一的 `name`、`acceleratorType`，并且在 `address`、
-`podMonitor`、`serviceMonitor` 中配置且只配置一种发现方式。支持的类型为 `gpu`、
-`npu`、`vgpu` 和 `vnpu`。
+每个数据源需要唯一的 `name`、`acceleratorType`，并且在 `podMonitor`、
+`serviceMonitor` 中配置且只配置一种发现方式。服务按节点运行，不支持静态地址。
+支持的类型为 `gpu`、`npu`、`vgpu` 和 `vnpu`。
 
 ```yaml
 listenAddress: ":9400"
@@ -19,10 +22,16 @@ scrapeTimeout: 5s
 maxConcurrency: 8
 
 sources:
-  # 静态地址，可配置任意多个。
-  - name: gpu-node-a
+  # 按 Service 标签动态发现 DCGM，并只采集本节点 Endpoint。
+  - name: dcgm-services
     acceleratorType: gpu
-    address: http://10.0.0.11:9400/metrics
+    serviceMonitor:
+      namespaceSelector:
+        matchNames: [gpu-operator]
+      selector:
+        matchLabels:
+          app: nvidia-dcgm-exporter
+      port: gpu-metrics
 
   # 按 Pod 标签动态发现。
   - name: vgpu-pods
@@ -57,17 +66,18 @@ sources:
 - `path`，默认 `/metrics`
 - `scheme`，默认 `http`
 
-Pod 动态发现通过 Pod IP 直接采集。Service 动态发现通过 EndpointSlice 展开每个
-Ready 后端，不访问会随机命中单个实例的 ClusterIP。目标会在每轮采集前重新发现，
-因此 Pod 扩缩容和 IP 变化不需要修改配置。
+Pod 动态发现使用 `spec.nodeName` 字段选择器，只通过 Pod IP 采集当前节点上的匹配
+Pod。Service 动态发现通过 EndpointSlice 展开后端，只保留 `nodeName` 等于当前节点
+的 Ready Endpoint，不访问会随机命中其他节点的 ClusterIP。没有 `nodeName` 的
+Endpoint 会被忽略。目标会在每轮采集前重新发现，因此 Pod 扩缩容和 IP 变化不需要
+修改配置。
 
-`labels` 用于补充底层指标缺失的固定标签，底层指标自身的标签优先。动态发现会从
-Pod 或 EndpointSlice 自动补充 `node`。静态 NPU/vGPU 地址如果没有 `node` 标签，
-应在 `labels` 中配置对应的 `node`。完整示例见
+`labels` 用于补充底层指标缺失的固定标签，底层指标自身的标签优先。动态发现会使用
+当前 DaemonSet Pod 所在节点补充 `node`。完整示例见
 [`config.example.yaml`](config.example.yaml)。
 
-使用动态发现时，进程默认读取集群内 ServiceAccount；本地运行可在配置顶层设置
-`kubeconfig`。ServiceAccount 至少需要以下只读权限：
+进程默认读取集群内 ServiceAccount；本地运行可在配置顶层设置 `kubeconfig`。
+ServiceAccount 需要以下指标发现和 CPU 型号上报权限：
 
 ```yaml
 - apiGroups: [""]
@@ -76,12 +86,17 @@ Pod 或 EndpointSlice 自动补充 `node`。静态 NPU/vGPU 地址如果没有 `
 - apiGroups: ["discovery.k8s.io"]
   resources: ["endpointslices"]
   verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "patch"]
 ```
 
 ## 运行
 
 ```bash
-go run ./cmd/accelerator-exporter --config ./config.example.yaml
+go run ./cmd/accelerator-exporter \
+  --config ./config.example.yaml \
+  --node-name k8s-node1
 ```
 
 HTTP 端点：
@@ -167,9 +182,9 @@ NVIDIA 的 `DCGM_EXP_GPU_HEALTH_STATUS`、`DCGM_EXP_XID_ERRORS_TOTAL`、
 
 ## Helm 部署
 
-项目内置 Chart：[`deploy/accelerator-exporter`](deploy/accelerator-exporter)。默认配置会
-通过 Pod/Service label selector 发现 DCGM、Volcano vGPU 和 Ascend NPU/vNPU
-采集端点。
+项目内置 Chart：[`deploy/accelerator-exporter`](deploy/accelerator-exporter)。Chart
+始终使用 DaemonSet，每个 Pod 通过 Downward API 获取所在节点名，并通过 Pod/Service
+label selector 只发现本节点的 DCGM、Volcano vGPU 和 Ascend NPU/vNPU 采集端点。
 
 ```bash
 helm upgrade --install accelerator-exporter \
@@ -190,10 +205,43 @@ helm upgrade --install accelerator-exporter \
 
 Chart 包含：
 
-- Deployment、ConfigMap 和 metrics Service
-- 动态发现所需的最小只读 ServiceAccount、ClusterRole 和 ClusterRoleBinding
+- DaemonSet、ConfigMap 和 metrics Service
+- 主进程内的 CPU 型号识别和当前 Node 元数据上报，无需 NFD 或 hostPath
+- 指标动态发现及 Node `get/patch` 所需的 ServiceAccount、ClusterRole 和 ClusterRoleBinding
 - 可选的 Prometheus Operator ServiceMonitor
 - `values.schema.json`，用于 Helm 校验和配置页面 Schema 渲染
 
-纯静态 `address` 配置时，Chart 不生成发现 RBAC，并自动设置
-`automountServiceAccountToken: false`。
+metrics Service 会选中所有节点上的 exporter Pod。Prometheus Operator 会分别抓取
+这些 Pod；直接访问 Service `/metrics` 只会命中其中一个节点，不提供集群聚合视图。
+
+## CPU 型号上报
+
+每个 DaemonSet Pod 的主进程通过 CPUID 读取所在节点的 CPU BrandName，将例如：
+
+```text
+Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz
+```
+
+转换成合法的 Kubernetes label value：
+
+```text
+Intel-Xeon-Gold-6330-CPU
+```
+
+进程仅查询 Downward API 注入的 `NODE_NAME` 对应 Node，并使用 merge patch 更新：
+
+```text
+label:      feature.node.cloud.xiaoshiai.cn/cpu-model.name=Intel-Xeon-Gold-6330-CPU
+annotation: feature.node.cloud.xiaoshiai.cn/cpu-model.raw-name=Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz
+```
+
+型号来源的优先顺序与 PAI 的 `pkg/node` 实现一致：CPUID BrandName、节点预设标签、
+CPUID VendorString，最后回退到 `Generic`。可以在特殊硬件上预先设置以下标签覆盖空的
+BrandName：
+
+```text
+feature.node.cloud.xiaoshiai.cn/cpu-model.predefined-name=<model>
+```
+
+进程启动后立即上报，此后每 30 分钟校验一次；失败时每分钟重试。上报不影响指标服务
+启动或 readiness。主容器保持非 root 运行，也不挂载宿主机目录。

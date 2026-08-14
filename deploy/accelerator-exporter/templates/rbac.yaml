@@ -1,4 +1,3 @@
-{{- $discoveryEnabled := eq (include "accelerator-exporter.kubernetesDiscoveryEnabled" .) "true" }}
 {{- if .Values.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
@@ -12,7 +11,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- end }}
-{{- if and $discoveryEnabled .Values.rbac.create }}
+{{- if .Values.rbac.create }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -29,6 +28,13 @@ rules:
     verbs:
       - get
       - list
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - patch
   - apiGroups:
       - discovery.k8s.io
     resources:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema#",
   "title": "Accelerator Exporter",
-  "description": "部署统一 GPU、NPU、vGPU、vNPU 指标聚合服务。",
+  "description": "以 DaemonSet 部署统一 GPU、NPU、vGPU、vNPU 节点指标采集服务。",
   "type": "object",
   "required": ["config", "containerPort", "service", "metrics"],
   "properties": {
@@ -47,17 +47,31 @@
         "customSources": {
           "type": "array",
           "title": "自定义指标源",
-          "description": "供非标准安装场景通过 Values 文件注入完整指标源定义。",
+          "description": "供非标准安装场景注入 PodMonitor 或 ServiceMonitor 指标源定义，不支持静态地址。",
           "default": [],
           "x-hidden": true,
           "items": {
-            "type": "object"
+            "type": "object",
+            "required": ["name", "acceleratorType"],
+            "not": {
+              "required": ["address"]
+            },
+            "oneOf": [
+              {
+                "required": ["podMonitor"],
+                "not": {"required": ["serviceMonitor"]}
+              },
+              {
+                "required": ["serviceMonitor"],
+                "not": {"required": ["podMonitor"]}
+              }
+            ]
           }
         },
         "scrapeInterval": {
           "type": "string",
           "title": "采集间隔",
-          "description": "重新发现并采集全部指标源的时间间隔。",
+          "description": "重新发现并采集本节点指标源的时间间隔。",
           "minLength": 2,
           "default": "30s",
           "x-cols": 6

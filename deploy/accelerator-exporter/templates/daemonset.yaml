@@ -1,13 +1,14 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: {{ include "accelerator-exporter.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "accelerator-exporter.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "accelerator-exporter.selectorLabels" . | nindent 6 }}
@@ -25,7 +26,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "accelerator-exporter.serviceAccountName" . }}
-      automountServiceAccountToken: {{ eq (include "accelerator-exporter.kubernetesDiscoveryEnabled" .) "true" }}
+      automountServiceAccountToken: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -38,9 +39,15 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --config=/etc/accelerator-exporter/config.yaml
+            - --node-name=$(NODE_NAME)
             {{- with .Values.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
@@ -80,9 +87,5 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
-      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -4,7 +4,6 @@ package config
 import (
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -27,7 +26,6 @@ type Runtime struct {
 	ScrapeInterval  time.Duration
 	ScrapeTimeout   time.Duration
 	MaxConcurrency  int
-	Sources         []model.Source
 	PodMonitors     []discovery.PodMonitor
 	ServiceMonitors []discovery.ServiceMonitor
 	Kubeconfig      string
@@ -44,7 +42,6 @@ type fileConfig struct {
 
 type sourceFile struct {
 	Name            string            `yaml:"name"`
-	Address         string            `yaml:"address"`
 	AcceleratorType string            `yaml:"acceleratorType"`
 	Labels          map[string]string `yaml:"labels"`
 	PodMonitor      *monitorFile      `yaml:"podMonitor"`
@@ -133,12 +130,11 @@ func Decode(reader io.Reader) (Runtime, error) {
 
 	runtime := Runtime{
 		ListenAddress: file.ListenAddress, ScrapeInterval: interval, ScrapeTimeout: timeout, MaxConcurrency: file.MaxConcurrency,
-		Sources: make([]model.Source, 0, len(file.Sources)), Kubeconfig: strings.TrimSpace(file.Kubeconfig),
+		Kubeconfig: strings.TrimSpace(file.Kubeconfig),
 	}
 	names := map[string]struct{}{}
 	for index, configured := range file.Sources {
 		configured.Name = strings.TrimSpace(configured.Name)
-		configured.Address = strings.TrimSpace(configured.Address)
 		configured.AcceleratorType = strings.ToLower(strings.TrimSpace(configured.AcceleratorType))
 		if configured.Name == "" {
 			return Runtime{}, fmt.Errorf("sources[%d].name is required", index)
@@ -163,9 +159,6 @@ func Decode(reader io.Reader) (Runtime, error) {
 			}
 		}
 		modes := 0
-		if configured.Address != "" {
-			modes++
-		}
 		if configured.PodMonitor != nil {
 			modes++
 		}
@@ -173,17 +166,7 @@ func Decode(reader io.Reader) (Runtime, error) {
 			modes++
 		}
 		if modes != 1 {
-			return Runtime{}, fmt.Errorf("source %q must configure exactly one of address, podMonitor, or serviceMonitor", configured.Name)
-		}
-		if configured.Address != "" {
-			address, err := normalizeAddress(configured.Address)
-			if err != nil {
-				return Runtime{}, fmt.Errorf("source %q: %w", configured.Name, err)
-			}
-			runtime.Sources = append(runtime.Sources, model.Source{
-				Name: configured.Name, Address: address, AcceleratorType: configured.AcceleratorType, Labels: labels,
-			})
-			continue
+			return Runtime{}, fmt.Errorf("source %q must configure exactly one of podMonitor or serviceMonitor", configured.Name)
 		}
 		if configured.PodMonitor != nil {
 			monitor, err := buildPodMonitor(configured.Name, configured.AcceleratorType, labels, configured.PodMonitor)
@@ -307,20 +290,6 @@ func positiveDuration(name, value string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be positive", name)
 	}
 	return duration, nil
-}
-
-func normalizeAddress(address string) (string, error) {
-	endpoint, err := url.Parse(address)
-	if err != nil {
-		return "", fmt.Errorf("parse address: %w", err)
-	}
-	if (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
-		return "", fmt.Errorf("address must be an absolute HTTP(S) URL")
-	}
-	if endpoint.Path == "" || endpoint.Path == "/" {
-		endpoint.Path = "/metrics"
-	}
-	return endpoint.String(), nil
 }
 
 func supportedType(acceleratorType string) bool {

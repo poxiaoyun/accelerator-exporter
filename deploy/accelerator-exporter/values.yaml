@@ -1,5 +1,9 @@
-replicaCount: 1
 revisionHistoryLimit: 3
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
 
 image:
   repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
@@ -79,7 +83,7 @@ config:
         path: /metrics
         scheme: http
 
-  # Optional raw exporter source definitions for non-standard installations.
+  # Optional PodMonitor/ServiceMonitor source definitions for non-standard installations.
   # This field is intentionally not exposed in the user-facing schema.
   customSources: []
 
@@ -150,6 +154,4 @@ priorityClassName: ""
 nodeSelector: {}
 tolerations: []
 affinity: {}
-topologySpreadConstraints: []
-
 extraArgs: []

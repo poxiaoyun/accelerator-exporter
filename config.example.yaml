@@ -4,19 +4,26 @@ scrapeTimeout: 10s
 maxConcurrency: 8
 
 # Local development only. In a cluster, omit this field to use the Pod's
-# ServiceAccount.
+# ServiceAccount. Pass --node-name or set NODE_NAME when running locally.
 kubeconfig: /Users/kezheng/.kubectl/develop.config
 sources:
-  # Static addresses can be listed multiple times.
-  - name: gpu-node-a
+  # ServiceMonitor-style discovery expands the matching Service through
+  # EndpointSlices, then keeps only ready endpoints on the local node.
+  - name: dcgm-services
     acceleratorType: gpu
-    address: http://10.0.0.11:9400/metrics
+    serviceMonitor:
+      namespaceSelector:
+        matchNames:
+          - gpu-operator
+      selector:
+        matchLabels:
+          app: nvidia-dcgm-exporter
+      port: gpu-metrics
+      path: /metrics
+      scheme: http
 
-  - name: gpu-node-b
-    acceleratorType: gpu
-    address: http://10.0.0.12:9400/metrics
-
-  # PodMonitor-style discovery: scrape every matching running Pod by Pod IP.
+  # PodMonitor-style discovery lists only matching running Pods scheduled on
+  # the local node and scrapes them by Pod IP.
   - name: vgpu-pods
     acceleratorType: vgpu
     podMonitor:
@@ -25,18 +32,11 @@ sources:
           - volcano-system
       selector:
         matchLabels:
-          app.kubernetes.io/name: volcano-device-plugin
-        matchExpressions:
-          - key: app.kubernetes.io/component
-            operator: In
-            values:
-              - volcano-vgpu-device-plugin
-      port: metrics
+          name: volcano-device-plugin
+      port: 9394
       path: /metrics
       scheme: http
 
-  # ServiceMonitor-style discovery: expand matching Services through
-  # EndpointSlices and scrape every ready backend address directly.
   - name: npu-services
     acceleratorType: npu
     serviceMonitor:
@@ -45,15 +45,22 @@ sources:
           - npu-exporter
       selector:
         matchLabels:
-          app.kubernetes.io/component: npu-exporter
-      port: http
+          app: npu-exporter
+      port: http-metrics
       path: /metrics
       scheme: http
 
-  # The same endpoint can use another adapter when it exposes both NPU and
-  # vNPU metric families.
-  - name: vnpu-node-a
+  # The same local endpoint can use another adapter when it exposes both NPU
+  # and vNPU metric families.
+  - name: vnpu-services
     acceleratorType: vnpu
-    address: http://10.0.1.11:8082/metrics
-    labels:
-      node: npu-node-a
+    serviceMonitor:
+      namespaceSelector:
+        matchNames:
+          - npu-exporter
+      selector:
+        matchLabels:
+          app: npu-exporter
+      port: http-metrics
+      path: /metrics
+      scheme: http

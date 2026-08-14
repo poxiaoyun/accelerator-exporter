@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"xiaoshiai.cn/rune/internal/config"
 	"xiaoshiai.cn/rune/internal/discovery"
 	"xiaoshiai.cn/rune/internal/exporter"
+	"xiaoshiai.cn/rune/internal/node"
 	"xiaoshiai.cn/rune/internal/scrape"
 )
 
@@ -32,10 +34,16 @@ func main() {
 
 func run() error {
 	var configPath string
+	var nodeName string
 	flag.StringVar(&configPath, "config", "", "Path to the accelerator exporter YAML configuration")
+	flag.StringVar(&nodeName, "node-name", os.Getenv("NODE_NAME"), "Name of the Kubernetes node whose accelerator targets are collected")
 	flag.Parse()
 	if configPath == "" {
 		return fmt.Errorf("--config is required")
+	}
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return fmt.Errorf("--node-name or NODE_NAME is required")
 	}
 	runtimeConfig, err := config.Load(configPath)
 	if err != nil {
@@ -45,38 +53,33 @@ func run() error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 	providers := []discovery.Provider{}
-	if len(runtimeConfig.Sources) > 0 {
-		providers = append(providers, discovery.Static(runtimeConfig.Sources))
+	restConfig, err := kubernetesConfig(runtimeConfig.Kubeconfig)
+	if err != nil {
+		return err
 	}
-	if len(runtimeConfig.PodMonitors) > 0 || len(runtimeConfig.ServiceMonitors) > 0 {
-		restConfig, err := kubernetesConfig(runtimeConfig.Kubeconfig)
+	coreClient, err := typedcorev1.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create Kubernetes CoreV1 client: %w", err)
+	}
+	if len(runtimeConfig.PodMonitors) > 0 {
+		provider, err := discovery.NewPodProvider(discovery.NewCorePodLister(coreClient), nodeName, runtimeConfig.PodMonitors)
 		if err != nil {
 			return err
 		}
-		coreClient, err := typedcorev1.NewForConfig(restConfig)
+		providers = append(providers, provider)
+	}
+	if len(runtimeConfig.ServiceMonitors) > 0 {
+		discoveryClient, err := typeddiscoveryv1.NewForConfig(restConfig)
 		if err != nil {
-			return fmt.Errorf("create Kubernetes CoreV1 client: %w", err)
+			return fmt.Errorf("create Kubernetes DiscoveryV1 client: %w", err)
 		}
-		if len(runtimeConfig.PodMonitors) > 0 {
-			provider, err := discovery.NewPodProvider(discovery.NewCorePodLister(coreClient), runtimeConfig.PodMonitors)
-			if err != nil {
-				return err
-			}
-			providers = append(providers, provider)
+		provider, err := discovery.NewServiceProvider(
+			discovery.NewServiceEndpointLister(coreClient, discoveryClient), nodeName, runtimeConfig.ServiceMonitors,
+		)
+		if err != nil {
+			return err
 		}
-		if len(runtimeConfig.ServiceMonitors) > 0 {
-			discoveryClient, err := typeddiscoveryv1.NewForConfig(restConfig)
-			if err != nil {
-				return fmt.Errorf("create Kubernetes DiscoveryV1 client: %w", err)
-			}
-			provider, err := discovery.NewServiceProvider(
-				discovery.NewServiceEndpointLister(coreClient, discoveryClient), runtimeConfig.ServiceMonitors,
-			)
-			if err != nil {
-				return err
-			}
-			providers = append(providers, provider)
-		}
+		providers = append(providers, provider)
 	}
 	httpClient := &http.Client{Timeout: runtimeConfig.ScrapeTimeout}
 	options := exporter.Options{
@@ -93,6 +96,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go metricExporter.Run(ctx)
+	go node.NewCPUModelPublisher(coreClient.Nodes(), nodeName, logger).Run(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", metricExporter.Metrics)
@@ -108,7 +112,7 @@ func run() error {
 	}
 	serverErrors := make(chan error, 1)
 	go func() {
-		logger.Info("starting accelerator exporter", "address", runtimeConfig.ListenAddress, "sourceDefinitions", len(runtimeConfig.Sources)+len(runtimeConfig.PodMonitors)+len(runtimeConfig.ServiceMonitors))
+		logger.Info("starting accelerator exporter", "address", runtimeConfig.ListenAddress, "node", nodeName, "sourceDefinitions", len(runtimeConfig.PodMonitors)+len(runtimeConfig.ServiceMonitors))
 		serverErrors <- server.ListenAndServe()
 	}()
 

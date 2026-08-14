@@ -3,6 +3,7 @@ module xiaoshiai.cn/rune
 go 1.25.0
 
 require (
+	github.com/klauspost/cpuid/v2 v2.2.10
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.4
 	gopkg.in/yaml.v3 v3.0.1

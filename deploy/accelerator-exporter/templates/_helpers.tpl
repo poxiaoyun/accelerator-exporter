@@ -52,13 +52,3 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- toYaml $sources -}}
 {{- end }}
-
-{{- define "accelerator-exporter.kubernetesDiscoveryEnabled" -}}
-{{- $enabled := false -}}
-{{- range (include "accelerator-exporter.sources" . | fromYamlArray) -}}
-{{- if or (hasKey . "podMonitor") (hasKey . "serviceMonitor") -}}
-{{- $enabled = true -}}
-{{- end -}}
-{{- end -}}
-{{- ternary "true" "false" $enabled -}}
-{{- end }}
