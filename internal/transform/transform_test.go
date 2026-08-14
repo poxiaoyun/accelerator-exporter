@@ -206,6 +206,30 @@ func TestTransformNPUHealthUsageAndErrors(t *testing.T) {
 	}
 }
 
+func TestTransformNPUDistinguishesMemoryCapacityAndBandwidthUtilization(t *testing.T) {
+	t.Parallel()
+	source := model.Source{
+		Name: "npu", AcceleratorType: model.AcceleratorTypeNPU,
+		Labels: map[string]string{"node": "node-npu"},
+	}
+	labels := map[string]string{
+		"id": "0", "vdie_id": "Ascend-0", "model_name": "Ascend910-Ascend-V1",
+	}
+	samples, dropped := Transform(source, model.Families{
+		"npu_chip_info_hbm_utilization":           {{Labels: labels, Value: 4}},
+		"npu_chip_info_hbm_bandwidth_utilization": {{Labels: labels, Value: 0}},
+		"npu_chip_info_hbm_used_memory":           {{Labels: labels, Value: 2908}},
+		"npu_chip_info_hbm_total_memory":          {{Labels: labels, Value: 65536}},
+		"npu_chip_info_overall_utilization":       {{Labels: labels, Value: 17}},
+	}, nil)
+	if dropped != 0 {
+		t.Fatalf("dropped = %d", dropped)
+	}
+	assertSample(t, samples, "accelerator_memory_bandwidth_utilization_percentage", "npu", 0)
+	assertSample(t, samples, "accelerator_memory_utilization_percentage", "npu", 2908.0/65536.0*100)
+	assertSample(t, samples, "accelerator_overall_utilization_percentage", "npu", 17)
+}
+
 func TestTransformNPUVGPUAndVNPU(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

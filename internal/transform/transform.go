@@ -67,7 +67,8 @@ var mappings = map[string][]metricMapping{
 	},
 	model.AcceleratorTypeNPU: {
 		{source: "npu_chip_info_utilization", target: "accelerator_core_utilization_percentage", factor: 1},
-		{source: "npu_chip_info_hbm_utilization", target: "accelerator_memory_bandwidth_utilization_percentage", factor: 1},
+		{source: "npu_chip_info_hbm_bandwidth_utilization", target: "accelerator_memory_bandwidth_utilization_percentage", factor: 1},
+		{source: "npu_chip_info_overall_utilization", target: "accelerator_overall_utilization_percentage", factor: 1},
 		{source: "npu_chip_info_hbm_used_memory", target: "accelerator_memory_used_bytes", factor: bytesPerMiB},
 		{source: "npu_chip_info_hbm_total_memory", target: "accelerator_memory_total_bytes", factor: bytesPerMiB},
 		{source: "npu_chip_info_temperature", target: "accelerator_temperature_celsius", factor: 1},

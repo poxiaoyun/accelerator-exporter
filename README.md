@@ -155,7 +155,9 @@ HTTP 端点：
 - `accelerator_partition_total_count`：每个带 `partition` 标签的设备样本值为 1
 - `accelerator_share_percentage`：vGPU memory limit 除以物理 GPU 总显存，带
   `share_basis="memory"` 标签
-- core、显存、温度和功耗指标：使用下方厂商映射
+- core、显存、温度和功耗指标：使用下方厂商映射；NPU 的显存带宽和整体利用率分别
+  使用 `npu_chip_info_hbm_bandwidth_utilization` 和
+  `npu_chip_info_overall_utilization`
 - `accelerator_health_status`：1 表示健康，0 表示不健康；GPU 优先使用
   `DCGM_EXP_GPU_HEALTH_STATUS` 的逐项健康检查，未启用时仍可根据
   `DCGM_FI_DEV_XID_ERRORS == 0` 和 `DCGM_FI_DEV_ROW_REMAP_FAILURE == 0`
@@ -165,9 +167,10 @@ HTTP 端点：
 - `accelerator_error_total_count`：使用 NVIDIA XID/ECC/退役页/重映射行/PCIe/NVLink
   和 Ascend HBM ECC/RoCE/MAC 的累计错误指标，按 `error_type` 区分
 
-`io_utilization`、`overall_utilization`、`memory_oom`、operations、batch、latency 和
-queue depth 没有跨厂商可靠的设备级派生方式。只有底层采集源提供同名 canonical
-指标时才会输出，不会根据其他利用率伪造数据。
+`io_utilization`、`memory_oom`、operations、batch、latency 和 queue depth 没有跨厂商
+可靠的设备级派生方式。只有底层采集源提供同名 canonical 指标时才会输出，不会根据
+其他利用率伪造数据。`overall_utilization` 当前可由 Ascend NPU 原生指标产生，其他类型
+仍只支持 canonical 透传。
 
 NVIDIA 的 `DCGM_EXP_GPU_HEALTH_STATUS`、`DCGM_EXP_XID_ERRORS_TOTAL`、
 `DCGM_EXP_CLOCK_EVENTS_COUNT` 以及部分 ECC/NVLink 指标可能未在 dcgm-exporter
