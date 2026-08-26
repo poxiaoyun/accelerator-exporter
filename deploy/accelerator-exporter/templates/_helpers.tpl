@@ -38,7 +38,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "accelerator-exporter.image" -}}
-{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- $tag := default .Chart.AppVersion .Values.image.tag -}}
+{{- printf "%s:%s" .Values.image.repository $tag }}
 {{- end }}
 
 {{- define "accelerator-exporter.sources" -}}

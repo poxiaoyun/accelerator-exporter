@@ -7,7 +7,8 @@ updateStrategy:
 
 image:
   repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
-  tag: main
+  # Defaults to Chart.appVersion so a versioned package deploys its matching image.
+  tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

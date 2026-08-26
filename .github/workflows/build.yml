@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "release-*"
+    tags:
+      - "v*.*.*"
+    paths-ignore:
+      - "README*"
+      - "**/README*"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "README*"
+      - "**/README*"
+
+env:
+  GIT_VERSION: ${{ github.head_ref || github.ref_name }}
+  GIT_COMMIT: ${{ github.sha }}
+
+concurrency:
+  group: build-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      - name: Check
+        run: make check
+
+      - name: Build binaries
+        run: make build
+
+      - name: Lint Helm chart
+        run: make helm-lint
+
+      - name: Log in to image registry
+        if: github.event_name == 'push'
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: make login-docker
+
+      - name: Set up QEMU
+        if: github.event_name == 'push'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'push'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Expose GitHub Actions cache runtime
+        if: github.event_name == 'push'
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Log in to Helm registry
+        if: github.ref_type == 'tag'
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: make login-helm
+
+      - name: Release
+        if: github.event_name == 'push'
+        env:
+          BUILDX_CACHE_TYPE: gha
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            make release
+          else
+            make release-image
+          fi
