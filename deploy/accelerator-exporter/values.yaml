@@ -34,7 +34,7 @@ config:
       serviceMonitor:
         namespaceSelector:
           matchNames:
-            - gpu-operator
+            - rune-system
         selector:
           matchLabels:
             app: nvidia-dcgm-exporter
@@ -48,11 +48,12 @@ config:
       podMonitor:
         namespaceSelector:
           matchNames:
-            - volcano-system
+            - kube-system
         selector:
           matchLabels:
-            name: volcano-device-plugin
-        port: 9394
+            app.kubernetes.io/name: volcano-device-plugin
+            app.kubernetes.io/component: volcano-vgpu-device-plugin
+        port: metrics
         path: /metrics
         scheme: http
 

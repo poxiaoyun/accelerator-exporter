@@ -27,7 +27,7 @@ sources:
     acceleratorType: gpu
     serviceMonitor:
       namespaceSelector:
-        matchNames: [gpu-operator]
+        matchNames: [rune-system]
       selector:
         matchLabels:
           app: nvidia-dcgm-exporter
@@ -38,10 +38,11 @@ sources:
     acceleratorType: vgpu
     podMonitor:
       namespaceSelector:
-        matchNames: [volcano-system]
+        matchNames: [kube-system]
       selector:
         matchLabels:
           app.kubernetes.io/name: volcano-device-plugin
+          app.kubernetes.io/component: volcano-vgpu-device-plugin
       port: metrics
 
   # 按 Service 标签动态发现，并通过 EndpointSlice 展开后端地址。
