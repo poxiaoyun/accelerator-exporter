@@ -218,6 +218,17 @@ Chart 包含：
 metrics Service 会选中所有节点上的 exporter Pod。Prometheus Operator 会分别抓取
 这些 Pod；直接访问 Service `/metrics` 只会命中其中一个节点，不提供集群聚合视图。
 
+ServiceMonitor 保留指标自身的工作负载标签，并把采集目标的 `namespace`、`pod`、
+`container` 重命名为 `exporter_namespace`、`exporter_pod`、`exporter_container`。
+这些规则在自定义目标重标记之后执行，避免无工作负载标签的整卡指标被误归到 exporter
+自身。自定义 metricRelabelings 不应重新覆盖工作负载身份标签。
+
+独占 NVIDIA GPU 的实例指标来自 DCGM。DCGM 必须启用 Kubernetes 模式并能访问
+kubelet 的 `/var/lib/kubelet/pod-resources`，且设备分配信息必须能匹配物理 GPU UUID，
+才能给指标附加实际的 `namespace`、`pod`、`container`。没有这些标签时只能展示
+节点/整卡指标。vGPU 的实例用量来自 Volcano vGPU monitor，不能将 DCGM 的整卡
+用量作为某个共享实例的用量。
+
 ## CPU 型号上报
 
 每个 DaemonSet Pod 的主进程通过 CPUID 读取所在节点的 CPU BrandName，将例如：

@@ -18,13 +18,22 @@ spec:
       {{- include "accelerator-exporter.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: metrics
+      # Namespace, Pod and container identify the measured workload.
+      honorLabels: true
       path: /metrics
       interval: {{ .Values.metrics.serviceMonitor.interval | quote }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | quote }}
-      {{- with .Values.metrics.serviceMonitor.relabelings }}
       relabelings:
+        {{- with .Values.metrics.serviceMonitor.relabelings }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
+        # Keep scrape-target identity separately. Device-only samples must not
+        # inherit the exporter's namespace/Pod and become workload metrics.
+        - action: labelmap
+          regex: (namespace|pod|container)
+          replacement: exporter_$1
+        - action: labeldrop
+          regex: namespace|pod|container
       {{- with .Values.metrics.serviceMonitor.metricRelabelings }}
       metricRelabelings:
         {{- toYaml . | nindent 8 }}

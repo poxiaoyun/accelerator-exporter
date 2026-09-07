@@ -1,0 +1,46 @@
+suite: workload metric identity
+templates:
+  - templates/servicemonitor.yaml
+tests:
+  - it: preserves workload labels without assigning device metrics to the exporter Pod
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].honorLabels
+          value: true
+      - equal:
+          path: spec.endpoints[0].relabelings
+          value:
+            - action: labelmap
+              regex: (namespace|pod|container)
+              replacement: exporter_$1
+            - action: labeldrop
+              regex: namespace|pod|container
+  - it: keeps workload protection when custom target and metric rules are configured
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.relabelings:
+        - action: replace
+          targetLabel: site
+          replacement: demo
+      metrics.serviceMonitor.metricRelabelings:
+        - action: drop
+          sourceLabels: [__name__]
+          regex: go_.*
+    asserts:
+      - equal:
+          path: spec.endpoints[0].honorLabels
+          value: true
+      - equal:
+          path: spec.endpoints[0].relabelings[0].targetLabel
+          value: site
+      - equal:
+          path: spec.endpoints[0].relabelings[1].action
+          value: labelmap
+      - equal:
+          path: spec.endpoints[0].relabelings[2].action
+          value: labeldrop
+      - equal:
+          path: spec.endpoints[0].metricRelabelings[0].regex
+          value: go_.*
