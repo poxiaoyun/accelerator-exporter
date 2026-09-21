@@ -27,7 +27,7 @@ sources:
     acceleratorType: gpu
     serviceMonitor:
       namespaceSelector:
-        matchNames: [rune-system]
+        matchNames: [rune-system, gpu-operator]
       selector:
         matchLabels:
           app: nvidia-dcgm-exporter
@@ -189,6 +189,12 @@ NVIDIA 的 `DCGM_EXP_GPU_HEALTH_STATUS`、`DCGM_EXP_XID_ERRORS_TOTAL`、
 项目内置 Chart：[`deploy/accelerator-exporter`](deploy/accelerator-exporter)。Chart
 始终使用 DaemonSet，每个 Pod 通过 Downward API 获取所在节点名，并通过 Pod/Service
 label selector 只发现本节点的 DCGM、Volcano vGPU 和 Ascend NPU/vNPU 采集端点。
+
+内置 `nvidia-dcgm` 数据源默认在 `rune-system` 和 `gpu-operator` 两个命名空间中
+发现 DCGM Service，兼容独立部署和由 NVIDIA Support 管理的 GPU Operator。
+如果安装在其它命名空间，可以覆盖
+`config.sourceDefinitions.nvidia-dcgm.serviceMonitor.namespaceSelector.matchNames`；
+该列表会整体替换默认值，仍只采集当前节点的 Ready Endpoint。
 
 ```bash
 helm upgrade --install accelerator-exporter \

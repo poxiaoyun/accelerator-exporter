@@ -15,6 +15,7 @@ sources:
       namespaceSelector:
         matchNames:
           - rune-system
+          - gpu-operator
       selector:
         matchLabels:
           app: nvidia-dcgm-exporter

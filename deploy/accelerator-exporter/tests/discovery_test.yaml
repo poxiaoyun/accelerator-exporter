@@ -1,0 +1,23 @@
+suite: NVIDIA DCGM namespace discovery
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: discovers DCGM in both legacy and NVIDIA Support namespaces
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: dcgm-service\s+serviceMonitor:\s+namespaceSelector:\s+matchNames:\s+- rune-system\s+- gpu-operator\s+path: /metrics\s+port: gpu-metrics\s+scheme: http\s+selector:\s+matchLabels:\s+app: nvidia-dcgm-exporter'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: vgpu-pods\s+podMonitor:\s+namespaceSelector:\s+matchNames:\s+- kube-system'
+  - it: honors an explicit namespace override instead of appending defaults
+    set:
+      config.sources: [nvidia-dcgm]
+      config.sourceDefinitions.nvidia-dcgm.serviceMonitor.namespaceSelector.matchNames: [custom-gpu]
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'matchNames:\s+- custom-gpu\s+path: /metrics'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'rune-system|gpu-operator|vgpu-pods'
