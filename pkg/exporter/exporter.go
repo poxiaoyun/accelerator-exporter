@@ -203,7 +203,11 @@ func (e *Exporter) Refresh(ctx context.Context) error {
 	}
 	if allocationErr != nil {
 		refreshErrors = append(refreshErrors, fmt.Errorf("read device allocation facts: %w", allocationErr))
+		e.state.allocationErrorsTotal++
 	}
+	// Recorded every round, so a source that stopped answering is visible instead
+	// of leaving the relation layer quietly empty.
+	e.state.allocationSourceUp = e.state.allocationConfigured && allocationErr == nil
 
 	var converted []accelerator.Sample
 	var allocationIndexes []map[string]accelerator.Identity

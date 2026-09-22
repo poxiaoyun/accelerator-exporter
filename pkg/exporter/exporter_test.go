@@ -323,6 +323,60 @@ func TestRefreshFansHealthDiagnosticsIntoOneState(t *testing.T) {
 	}
 }
 
+// TestRefreshReportsTheAllocationSourceOutcome covers the failure and recovery
+// of the device allocation source. A node whose allocation source stopped
+// answering and a node that has none both leave the relation layer empty, and
+// the two must be distinguishable from the metrics alone.
+func TestRefreshReportsTheAllocationSourceOutcome(t *testing.T) {
+	t.Parallel()
+	scraper := &fakeScraper{results: map[string]accelerator.Families{
+		"http://gpu/metrics": {
+			"DCGM_FI_DEV_GPU_UTIL": {{Labels: map[string]string{"Hostname": "node-a", "UUID": "GPU-1"}, Value: 80}},
+		},
+	}, errors: map[string]error{}}
+	allocationSource := &fakeAllocationProvider{err: errors.New("kubelet is unreachable")}
+	targets := fakeTargetProvider{targets: []accelerator.Source{
+		{Name: "gpu", Address: "http://gpu/metrics", Rule: accelerator.RuleNvidiaDCGM},
+	}}
+	metricExporter, err := New(NewDefaultOptions(), scraper, targets, allocationSource, testLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := metricExporter.Refresh(context.Background()); err == nil {
+		t.Fatal("a failed allocation read must be reported")
+	}
+	body := metricsBody(metricExporter)
+	for _, expected := range []string{
+		"accelerator_exporter_allocation_source_configured 1",
+		"accelerator_exporter_allocation_source_up 0",
+		"accelerator_exporter_allocation_errors_total 1",
+		"accelerator_exporter_last_refresh_success 0",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("metrics do not contain %q:\n%s", expected, body)
+		}
+	}
+
+	// The source recovers: the gauge follows it, the counter stays cumulative, and
+	// the device layer was produced throughout.
+	allocationSource.err = nil
+	if err := metricExporter.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	body = metricsBody(metricExporter)
+	for _, expected := range []string{
+		"accelerator_exporter_allocation_source_up 1",
+		"accelerator_exporter_allocation_errors_total 1",
+		"accelerator_exporter_last_refresh_success 1",
+		"accelerator_core_utilization_percentage{",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("metrics do not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
 func TestNewRequiresItsSourcesAndOptions(t *testing.T) {
 	t.Parallel()
 	targets := fakeTargetProvider{}
