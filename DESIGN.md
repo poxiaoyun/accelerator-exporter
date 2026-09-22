@@ -48,6 +48,13 @@
   DCGM 也来自 vGPU monitor 自己的采样），配置在**前**的源优先，后续源的同目标同指标读数按重复
   丢弃，计入 `accelerator_exporter_duplicate_samples_total`。所以发现阶段必须保留配置顺序，不能
   按源名重排；`Composite` 在合并 pod 类与 service 类目标时按源在配置数组里的位置排序。
+  这条只能裁决**标签完全相同**的序列：`accelerator_info` 带静态信息，只有知道驱动版本和 PCI
+  位置的那个源才填得出来，所以同一张卡会把两条 `accelerator_info` 都留在产出里（只有源一方的
+  读数被丢掉）。消费方按 `(node, device_id)` 聚合一次即可 —— 实测开发集群上，同一张卡的
+  `accelerator_core_utilization_percentage` 被裁成一条，而 `accelerator_info` 有两条。
+- **身份不完整不丢样本**：缺的标签不出现，同时计入 `accelerator_exporter_contract_violations_total{reason}`。
+  只有三类情况丢弃样本：指标名不在契约里、适用形态与该目标形态不符、`health_state` 的 `state`
+  不在闭集内。所有丢弃与违约都按 reason 计数，不静默。
 - **身份不完整不丢样本**：缺的标签不出现，同时计入 `accelerator_exporter_contract_violations_total{reason}`。
   只有三类情况丢弃样本：指标名不在契约里、适用形态与该目标形态不符、`health_state` 的 `state`
   不在闭集内。所有丢弃与违约都按 reason 计数，不静默。
