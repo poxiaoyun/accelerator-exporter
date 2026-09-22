@@ -264,7 +264,7 @@ func (e *Exporter) Refresh(ctx context.Context) error {
 		if drop {
 			continue
 		}
-		key := sampleKey(sample)
+		key := dedupKey(sample)
 		if _, exists := seriesByKey[key]; exists {
 			duplicateSamples++
 			continue
@@ -469,6 +469,35 @@ func sampleKey(sample accelerator.Sample) string {
 	}
 	sort.Strings(labels)
 	return sample.Name + "\xff" + strings.Join(labels, "\xff")
+}
+
+// dedupKey is the key that decides whether two normalized samples are the same
+// series.
+//
+// Every observation metric is keyed by its full label set: two sources that
+// cover the same metric on the same observation target produce identical labels
+// (a rule completes its identity from the inventory of the round), so the
+// configured order arbitrates which reading survives.
+//
+// accelerator_info is the exception. It is the only metric that carries the
+// static information, and only the source that reads the driver version and the
+// PCI position can fill those labels, so the same target arrives twice under two
+// different label sets and the label-set key would keep both. The inventory is
+// keyed by the observation target instead — (node, device_id) is the target key
+// of the contract — so exactly one series per target survives, whichever source
+// the configuration lists first.
+//
+// A target whose device_id did not resolve keeps the label-set key: without an
+// identity there is no way to tell two incomplete targets apart, and merging
+// them would hide one of them.
+func dedupKey(sample accelerator.Sample) string {
+	if sample.Name == accelerator.InventoryMetricName {
+		device := sample.Labels[accelerator.LabelDeviceID]
+		if device != "" {
+			return sample.Name + "\xff" + sample.Labels[accelerator.LabelNode] + "\xff" + device
+		}
+	}
+	return sampleKey(sample)
 }
 
 func writeGauge(writer http.ResponseWriter, name, help string, value float64) {

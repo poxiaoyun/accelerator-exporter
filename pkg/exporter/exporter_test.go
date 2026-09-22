@@ -331,6 +331,77 @@ func TestRefreshPrefersTheFirstConfiguredSourceForASharedTarget(t *testing.T) {
 	}
 }
 
+func TestRefreshDeduplicatesTheInventoryByObservationTarget(t *testing.T) {
+	t.Parallel()
+	// The two sources describe the same card, but only DCGM reads the driver
+	// version and the PCI position, so their inventories do not share a label
+	// set. The inventory is keyed by the observation target, not by the label
+	// set, so the card is listed once and the losing source is counted as a
+	// duplicate.
+	dcgm := accelerator.Source{
+		Name: "dcgm", Address: "http://dcgm/metrics", Rule: accelerator.RuleNvidiaDCGM,
+	}
+	vGPU := accelerator.Source{
+		Name: "vgpu", Address: "http://vgpu/metrics", Rule: accelerator.RuleVolcanoVGPU,
+		Labels: map[string]string{"node": "node-a", "model": "A100"},
+	}
+	card := "GPU-1"
+	scraper := &fakeScraper{
+		results: map[string]accelerator.Families{
+			"http://dcgm/metrics": {"DCGM_FI_DEV_GPU_UTIL": {{Labels: map[string]string{
+				"Hostname": "node-a", "UUID": card, "modelName": "A100",
+				"driver_version": "550.90.07", "pci_bus_id": "00000000:07:00.0",
+			}, Value: 80}}},
+			"http://vgpu/metrics": {"HostCoreUtilization": {{Labels: map[string]string{
+				"deviceuuid": card, "deviceidx": "0", "zone": "vGPU",
+			}, Value: 7}}},
+		},
+		errors: map[string]error{},
+	}
+	for _, test := range []struct {
+		name    string
+		sources []accelerator.Source
+		want    string
+	}{
+		{
+			name:    "DCGM is configured first",
+			sources: []accelerator.Source{dcgm, vGPU},
+			want:    `accelerator_info{device_id="GPU-1",device_mode="physical",device_type="gpu",driver_version="550.90.07",model="A100",node="node-a",pci_bus_id="00000000:07:00.0",vendor="nvidia"} 1`,
+		},
+		{
+			// The inventory of the first source survives, and this one carries no
+			// static information because the vGPU monitor does not report any.
+			name:    "the vGPU monitor is configured first",
+			sources: []accelerator.Source{vGPU, dcgm},
+			want:    `accelerator_info{device_id="GPU-1",device_mode="physical",device_type="gpu",model="A100",node="node-a",vendor="nvidia"} 1`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			metricExporter := newTestExporter(t, scraper, test.sources)
+			if err := metricExporter.Refresh(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			body := metricsBody(metricExporter)
+			parser := expfmt.NewTextParser(prometheusmodel.LegacyValidation)
+			families, err := parser.TextToMetricFamilies(strings.NewReader(body))
+			if err != nil {
+				t.Fatalf("invalid Prometheus exposition: %v\n%s", err, body)
+			}
+			if got := len(families["accelerator_info"].GetMetric()); got != 1 {
+				t.Fatalf("the inventory must list the observation target once, got %d:\n%s", got, body)
+			}
+			if !strings.Contains(body, test.want) {
+				t.Fatalf("want %q in:\n%s", test.want, body)
+			}
+			// The card's utilization and the losing inventory each collide once.
+			if !strings.Contains(body, "accelerator_exporter_duplicate_samples_total 2") {
+				t.Fatalf("the losing readings must be counted as duplicates:\n%s", body)
+			}
+		})
+	}
+}
+
 func TestMetricsUsesCanonicalCounterType(t *testing.T) {
 	t.Parallel()
 	labels := map[string]string{"Hostname": "node-a", "UUID": "GPU-1", "modelName": "A100", "xid": "31"}

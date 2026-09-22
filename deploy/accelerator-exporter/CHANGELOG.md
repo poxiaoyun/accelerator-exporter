@@ -1,6 +1,18 @@
 # Changelog
 
-## [2.0.0] - 2026-09-22
+## [Unreleased]
+
+### Fixed
+
+- The observation target inventory is deduplicated by `(node, device_id)` instead of by label set.
+  `accelerator_info` carries the static information that only the source reading the driver version
+  and the PCI position can fill, so one card reported by both DCGM and the vGPU monitor used to leave
+  two inventory series behind while its value metrics were collapsed to one. The inventory now holds
+  one series per target and keeps the source configured first; the losing inventory is counted in
+  `accelerator_exporter_duplicate_samples_total` like any other duplicate. A target whose `device_id`
+  did not resolve still falls back to the label set, so incomplete targets are never merged.
+
+## [1.0.4] - 2026-09-22
 
 ### Breaking
 

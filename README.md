@@ -53,6 +53,10 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 **配置在前的源优先**，后面那个按重复丢弃并计入 `accelerator_exporter_duplicate_samples_total`。
 胜负不取决于源名，也不取决于哪次抓取先完成。Chart 的默认顺序已按此排好：DCGM 在前。
 
+观测量的判重键是标签集；`accelerator_info` 例外 —— 只有知道驱动版本和 PCI 位置的源才填得出静态
+信息，两个源的标签集因此不同，所以它按观测目标键 `(node, device_id)` 判重：每个观测目标只留一条，
+同样保留配置在前的源。同一张卡不会在清单里出现两次。
+
 只配 `volcano-vgpu` 时它自己提供整卡读数，但没有整卡显存总量 —— 该 monitor 不报。
 
 ```yaml
