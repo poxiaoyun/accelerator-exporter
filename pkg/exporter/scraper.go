@@ -1,5 +1,4 @@
-// Package scrape fetches and parses Prometheus text exposition endpoints.
-package scrape
+package exporter
 
 import (
 	"bytes"
@@ -13,61 +12,65 @@ import (
 	"github.com/prometheus/common/expfmt"
 	prometheusmodel "github.com/prometheus/common/model"
 
-	"xiaoshiai.cn/rune/internal/model"
+	"xiaoshiai.cn/accelerator-exporter/pkg/accelerator"
 )
 
 const defaultMaxResponseBytes = 32 << 20
 
-// Client directly scrapes accelerator exporter endpoints.
-type Client struct {
+// HTTPScraper reads and parses the metrics of one HTTP endpoint.
+type HTTPScraper struct {
 	httpClient       *http.Client
 	maxResponseBytes int64
 }
 
-// NewClient creates a metrics endpoint client.
-func NewClient(httpClient *http.Client) *Client {
+// NewHTTPScraper creates the direct HTTP metrics reader.
+func NewHTTPScraper(httpClient *http.Client) *HTTPScraper {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &Client{httpClient: httpClient, maxResponseBytes: defaultMaxResponseBytes}
+	return &HTTPScraper{httpClient: httpClient, maxResponseBytes: defaultMaxResponseBytes}
 }
 
 // Scrape fetches and parses one Prometheus text exposition endpoint.
-func (c *Client) Scrape(ctx context.Context, address string) (model.Families, error) {
-	endpoint, err := url.Parse(address)
+//
+// The whole target is taken rather than its address so every error names the
+// source configuration the endpoint belongs to, which is what an operator needs
+// when one of several configured sources misbehaves.
+func (c *HTTPScraper) Scrape(ctx context.Context, target accelerator.Source) (accelerator.Families, error) {
+	endpoint, err := url.Parse(target.Address)
 	if err != nil {
-		return nil, fmt.Errorf("parse metrics address: %w", err)
+		return nil, fmt.Errorf("parse metrics address of source %q: %w", target.Name, err)
 	}
 	if (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
-		return nil, fmt.Errorf("metrics address must be an absolute HTTP(S) URL")
+		return nil, fmt.Errorf("metrics address of source %q must be an absolute HTTP(S) URL", target.Name)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create metrics request: %w", err)
+		return nil, fmt.Errorf("create metrics request for source %q: %w", target.Name, err)
 	}
 	request.Header.Set("Accept", string(expfmt.FmtText))
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("request metrics: %w", err)
+		return nil, fmt.Errorf("request metrics from source %q: %w", target.Name, err)
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, c.maxResponseBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read metrics response: %w", err)
+		return nil, fmt.Errorf("read metrics response of source %q: %w", target.Name, err)
 	}
 	if int64(len(body)) > c.maxResponseBytes {
-		return nil, fmt.Errorf("metrics response exceeds %d bytes", c.maxResponseBytes)
+		return nil, fmt.Errorf("metrics response of source %q exceeds %d bytes", target.Name, c.maxResponseBytes)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("metrics endpoint returned HTTP %d: %s", response.StatusCode, string(body))
+		return nil, fmt.Errorf("source %q returned HTTP %d: %s", target.Name, response.StatusCode, string(body))
 	}
 
 	parser := expfmt.NewTextParser(prometheusmodel.LegacyValidation)
 	metricFamilies, err := parser.TextToMetricFamilies(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("parse Prometheus metrics: %w", err)
+		return nil, fmt.Errorf("parse Prometheus metrics of source %q: %w", target.Name, err)
 	}
-	families := make(model.Families, len(metricFamilies))
+	families := make(accelerator.Families, len(metricFamilies))
 	for name, family := range metricFamilies {
 		for _, metric := range family.Metric {
 			value, ok := metricValue(family.GetType(), metric)
@@ -78,7 +81,7 @@ func (c *Client) Scrape(ctx context.Context, address string) (model.Families, er
 			for _, pair := range metric.Label {
 				labels[pair.GetName()] = pair.GetValue()
 			}
-			families[name] = append(families[name], model.RawSample{Labels: labels, Value: value})
+			families[name] = append(families[name], accelerator.RawSample{Labels: labels, Value: value})
 		}
 	}
 	return families, nil

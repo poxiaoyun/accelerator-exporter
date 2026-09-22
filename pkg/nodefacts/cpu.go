@@ -1,5 +1,5 @@
 // Package node publishes node-local hardware information to Kubernetes Nodes.
-package node
+package nodefacts
 
 import (
 	"context"

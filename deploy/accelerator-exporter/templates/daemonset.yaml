@@ -39,7 +39,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --config=/etc/accelerator-exporter/config.yaml
-            - --node-name=$(NODE_NAME)
             {{- with .Values.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -70,10 +69,25 @@ spec:
             - name: config
               mountPath: /etc/accelerator-exporter
               readOnly: true
+            {{- with .Values.podResources.hostPath }}
+            - name: pod-resources
+              mountPath: {{ . | quote }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ include "accelerator-exporter.fullname" . }}
+        {{- with .Values.podResources.hostPath }}
+        # The device allocation facts live on the host. DirectoryOrCreate keeps the
+        # DaemonSet schedulable on a node whose kubelet does not expose the socket:
+        # the exporter then runs with its whole device layer and reports the missing
+        # allocation source through its own metrics, instead of failing to start.
+        - name: pod-resources
+          hostPath:
+            path: {{ . | quote }}
+            type: DirectoryOrCreate
+        {{- end }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}

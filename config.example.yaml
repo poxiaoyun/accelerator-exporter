@@ -6,11 +6,20 @@ maxConcurrency: 8
 # Local development only. In a cluster, omit this field to use the Pod's
 # ServiceAccount. Pass --node-name or set NODE_NAME when running locally.
 kubeconfig: /Users/kezheng/.kubectl/develop.config
+
+# The device allocation facts come from the kubelet pod-resources API, which is
+# read from --pod-resources-socket (default:
+# /var/lib/kubelet/pod-resources/kubelet.sock). Without it the exporter still
+# produces the whole device layer but no accelerator_pod_info.
+
+# Every source names the built-in rule that interprets its metrics. The rule
+# decides device_type, device_mode, vendor and the identity of each observation
+# target, so a source never states them itself.
 sources:
   # ServiceMonitor-style discovery expands the matching Service through
   # EndpointSlices, then keeps only ready endpoints on the local node.
-  - name: dcgm-services
-    acceleratorType: gpu
+  - name: nvidia-dcgm-exporter
+    rule: nvidia-dcgm
     serviceMonitor:
       namespaceSelector:
         matchNames:
@@ -25,8 +34,8 @@ sources:
 
   # PodMonitor-style discovery lists only matching running Pods scheduled on
   # the local node and scrapes them by Pod IP.
-  - name: vgpu-pods
-    acceleratorType: vgpu
+  - name: volcano-vgpu-device-plugin
+    rule: volcano-vgpu
     podMonitor:
       namespaceSelector:
         matchNames:
@@ -39,23 +48,11 @@ sources:
       path: /metrics
       scheme: http
 
-  - name: npu-services
-    acceleratorType: npu
-    serviceMonitor:
-      namespaceSelector:
-        matchNames:
-          - npu-exporter
-      selector:
-        matchLabels:
-          app: npu-exporter
-      port: http-metrics
-      path: /metrics
-      scheme: http
-
-  # The same local endpoint can use another adapter when it exposes both NPU
-  # and vNPU metric families.
-  - name: vnpu-services
-    acceleratorType: vnpu
+  # One source covers the whole npu-exporter endpoint. It exposes both the
+  # physical NPU families and the vNPU families, so configuring it twice would
+  # scrape the same endpoint twice and discard half the result.
+  - name: npu-exporter
+    rule: ascend-npu
     serviceMonitor:
       namespaceSelector:
         matchNames:

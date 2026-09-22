@@ -6,10 +6,10 @@ tests:
     asserts:
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'name: dcgm-service\s+serviceMonitor:\s+namespaceSelector:\s+matchNames:\s+- rune-system\s+- gpu-operator\s+path: /metrics\s+port: gpu-metrics\s+scheme: http\s+selector:\s+matchLabels:\s+app: nvidia-dcgm-exporter'
+          pattern: 'name: nvidia-dcgm-exporter\s+rule: nvidia-dcgm\s+serviceMonitor:\s+namespaceSelector:\s+matchNames:\s+- rune-system\s+- gpu-operator\s+path: /metrics\s+port: gpu-metrics\s+scheme: http\s+selector:\s+matchLabels:\s+app: nvidia-dcgm-exporter'
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'name: vgpu-pods\s+podMonitor:\s+namespaceSelector:\s+matchNames:\s+- kube-system'
+          pattern: 'name: volcano-vgpu-device-plugin\s+podMonitor:\s+namespaceSelector:\s+matchNames:\s+- kube-system'
   - it: honors an explicit namespace override instead of appending defaults
     set:
       config.sources: [nvidia-dcgm]
@@ -20,4 +20,4 @@ tests:
           pattern: 'matchNames:\s+- custom-gpu\s+path: /metrics'
       - notMatchRegex:
           path: data["config.yaml"]
-          pattern: 'rune-system|gpu-operator|vgpu-pods'
+          pattern: 'rune-system|gpu-operator|volcano-vgpu-device-plugin'

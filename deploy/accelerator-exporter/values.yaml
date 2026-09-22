@@ -23,14 +23,16 @@ config:
     - nvidia-dcgm
     - volcano-vgpu
     - ascend-npu
-    - ascend-vnpu
 
-  # Internal preset definitions selected by config.sources. These are kept out
-  # of values.schema.json so users only choose the collectors they need.
+  # Internal preset definitions selected by config.sources. Each preset names the
+  # built-in rule that interprets its metrics: the rule decides device_type,
+  # device_mode, vendor and the identity of every observation target, so a preset
+  # never states them itself. These are kept out of values.schema.json so users
+  # only choose the collectors they need.
   sourceDefinitions:
     nvidia-dcgm:
-      name: dcgm-service
-      acceleratorType: gpu
+      name: nvidia-dcgm-exporter
+      rule: nvidia-dcgm
       serviceMonitor:
         namespaceSelector:
           matchNames:
@@ -44,8 +46,8 @@ config:
         scheme: http
 
     volcano-vgpu:
-      name: vgpu-pods
-      acceleratorType: vgpu
+      name: volcano-vgpu-device-plugin
+      rule: volcano-vgpu
       podMonitor:
         namespaceSelector:
           matchNames:
@@ -58,23 +60,12 @@ config:
         path: /metrics
         scheme: http
 
+    # One preset covers the whole npu-exporter endpoint. It exposes both the
+    # physical NPU families and the vNPU families, so a separate vNPU preset
+    # would scrape the same endpoint twice and discard half the result.
     ascend-npu:
-      name: npu-services
-      acceleratorType: npu
-      serviceMonitor:
-        namespaceSelector:
-          matchNames:
-            - npu-exporter
-        selector:
-          matchLabels:
-            app: npu-exporter
-        port: http-metrics
-        path: /metrics
-        scheme: http
-
-    ascend-vnpu:
-      name: vnpu-services
-      acceleratorType: vnpu
+      name: npu-exporter
+      rule: ascend-npu
       serviceMonitor:
         namespaceSelector:
           matchNames:
@@ -89,6 +80,15 @@ config:
   # Optional PodMonitor/ServiceMonitor source definitions for non-standard installations.
   # This field is intentionally not exposed in the user-facing schema.
   customSources: []
+
+# accelerator_pod_info is built from kubelet's device allocation facts, read from
+# the pod-resources socket. The directory is mounted read-only at the same path
+# inside the container, so the default --pod-resources-socket keeps working.
+# Set hostPath to "" on a cluster that does not expose it: the exporter then
+# still produces the whole device layer, and reports
+# accelerator_exporter_allocation_source_configured 0.
+podResources:
+  hostPath: /var/lib/kubelet/pod-resources
 
 serviceAccount:
   create: true

@@ -1,0 +1,59 @@
+== dcgm-physical-gpu
+  accelerator_core_utilization_percentage{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 75
+  accelerator_errors_total{device_id=GPU-1,device_mode=physical,device_type=gpu,error_code=31,error_type=xid,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 3
+  accelerator_errors_total{device_id=GPU-1,device_mode=physical,device_type=gpu,error_type=ecc_volatile_double_bit,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 1
+  accelerator_errors_total{device_id=GPU-1,device_mode=physical,device_type=gpu,error_type=pcie_replay,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 4
+  accelerator_health_diagnostic_info{category=hardware_memory,code=dcgm_fr_volatile_dbe_detected,device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,severity=critical,vendor=nvidia} 1
+  accelerator_health_state{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,state=fault,vendor=nvidia} 1
+  accelerator_info{device_id=GPU-1,device_mode=physical,device_type=gpu,driver_version=550.90.07,model=NVIDIA A100-SXM4-80GB,node=node-gpu,pci_bus_id=00000000:07:00.0,vendor=nvidia} 1
+  accelerator_memory_bandwidth_utilization_percentage{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 30
+  accelerator_memory_free_bytes{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 6.2706941952e+10
+  accelerator_memory_total_bytes{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 8.589934592e+10
+  accelerator_memory_used_bytes{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 2.147483648e+10
+  accelerator_memory_utilization_percentage{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 25
+  accelerator_power_limit_watts{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 300
+  accelerator_power_usage_watts{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 210
+  accelerator_temperature_celsius{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 61
+  accelerator_throttle_reason_info{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,reason=thermal,vendor=nvidia} 1
+== dcgm-mig-instance
+  accelerator_core_utilization_percentage{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,vendor=nvidia} 40
+  accelerator_info{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,driver_version=550.90.07,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,pci_bus_id=00000000:07:00.0,profile=1g.10gb,vendor=nvidia} 1
+  accelerator_memory_free_bytes{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,vendor=nvidia} 9.663676416e+09
+  accelerator_memory_total_bytes{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,vendor=nvidia} 1.073741824e+10
+  accelerator_memory_used_bytes{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,vendor=nvidia} 1.073741824e+09
+  accelerator_memory_utilization_percentage{device_id=GPU-1.3,device_index=3,device_mode=partition,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,parent_device_id=GPU-1,vendor=nvidia} 10
+== ascend-npu
+  accelerator_core_utilization_percentage{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 55
+  accelerator_errors_total{device_id=Ascend-0,device_mode=physical,device_type=npu,error_type=hbm_ecc_double_bit,model=Ascend 910B,node=node-npu,vendor=huawei} 5
+  accelerator_errors_total{device_id=Ascend-0,device_mode=physical,device_type=npu,error_type=roce_verification,model=Ascend 910B,node=node-npu,vendor=huawei} 7
+  accelerator_health_state{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,state=healthy,vendor=huawei} 1
+  accelerator_info{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 1
+  accelerator_memory_bandwidth_utilization_percentage{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 12
+  accelerator_memory_free_bytes{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 6.5670217728e+10
+  accelerator_memory_total_bytes{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 6.8719476736e+10
+  accelerator_memory_used_bytes{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 3.049259008e+09
+  accelerator_memory_utilization_percentage{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 4.437255859375
+  accelerator_overall_utilization_percentage{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 41
+  accelerator_power_limit_watts{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 300
+  accelerator_power_usage_watts{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 180
+  accelerator_temperature_celsius{device_id=Ascend-0,device_mode=physical,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 52
+== ascend-vnpu
+  accelerator_core_utilization_percentage{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 33
+  accelerator_info{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 1
+  accelerator_memory_free_bytes{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 6.291456e+06
+  accelerator_memory_total_bytes{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 8.388608e+06
+  accelerator_memory_used_bytes{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 2.097152e+06
+  accelerator_memory_utilization_percentage{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 25
+== volcano-vgpu
+  accelerator_core_utilization_percentage{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 66
+  accelerator_info{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 1
+  accelerator_memory_free_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 4.294967296e+09
+  accelerator_memory_total_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 8.589934592e+09
+  accelerator_memory_used_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 4.294967296e+09
+  accelerator_memory_utilization_percentage{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 50
+== canonical-passthrough
+  accelerator_info{device_id=GPU-1,device_mode=physical,device_type=gpu,driver_version=550.90.07,model=NVIDIA A100-SXM4-80GB,node=node-gpu,pci_bus_id=00000000:07:00.0,vendor=nvidia} 1
+  accelerator_io_utilization_percentage{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 12
+== missing-identity
+  accelerator_core_utilization_percentage{device_mode=physical,device_type=gpu,model=unknown,node=node-a,vendor=nvidia} 1
+  accelerator_info{device_mode=physical,device_type=gpu,model=unknown,node=node-a,vendor=nvidia} 1

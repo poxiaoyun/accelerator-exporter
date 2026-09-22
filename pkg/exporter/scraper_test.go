@@ -1,4 +1,4 @@
-package scrape
+package exporter
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"xiaoshiai.cn/accelerator-exporter/pkg/accelerator"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -16,7 +18,7 @@ func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, 
 
 func TestClientScrapeParsesPrometheusText(t *testing.T) {
 	t.Parallel()
-	client := NewClient(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	client := NewHTTPScraper(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() != "http://dcgm:9400/metrics" {
 			t.Fatalf("request URL = %q", request.URL.String())
 		}
@@ -29,7 +31,7 @@ func TestClientScrapeParsesPrometheusText(t *testing.T) {
 			)),
 		}, nil
 	})})
-	families, err := client.Scrape(context.Background(), "http://dcgm:9400/metrics")
+	families, err := client.Scrape(context.Background(), accelerator.Source{Name: "nvidia-dcgm-exporter", Address: "http://dcgm:9400/metrics"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,13 +43,18 @@ func TestClientScrapeParsesPrometheusText(t *testing.T) {
 
 func TestClientScrapeRejectsBadStatusAndAddress(t *testing.T) {
 	t.Parallel()
-	client := NewClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	client := NewHTTPScraper(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("bad gateway"))}, nil
 	})})
-	if _, err := client.Scrape(context.Background(), "not-a-url"); err == nil {
+	if _, err := client.Scrape(context.Background(), accelerator.Source{Name: "bad", Address: "not-a-url"}); err == nil {
 		t.Fatal("expected invalid address error")
 	}
-	if _, err := client.Scrape(context.Background(), "http://dcgm/metrics"); err == nil || !strings.Contains(err.Error(), "HTTP 502") {
+	_, err := client.Scrape(context.Background(), accelerator.Source{Name: "nvidia-dcgm-exporter", Address: "http://dcgm/metrics"})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 502") {
 		t.Fatalf("unexpected HTTP error: %v", err)
+	}
+	// The error must name the source configuration, not only the URL.
+	if !strings.Contains(err.Error(), "nvidia-dcgm-exporter") {
+		t.Fatalf("error does not name the source: %v", err)
 	}
 }

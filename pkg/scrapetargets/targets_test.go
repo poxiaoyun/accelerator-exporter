@@ -1,4 +1,4 @@
-package discovery
+package scrapetargets
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"xiaoshiai.cn/rune/internal/model"
+	"xiaoshiai.cn/accelerator-exporter/pkg/accelerator"
 )
 
 type fakePodLister struct {
@@ -51,13 +51,16 @@ func TestPodProviderDiscoversMatchingRunningPods(t *testing.T) {
 			Status:     corev1.PodStatus{Phase: corev1.PodPending},
 		},
 	}}, error: map[string]error{}}
-	provider, err := NewPodProvider(lister, "node-a", []PodMonitor{{
-		Name: "dcgm", AcceleratorType: model.AcceleratorTypeGPU, Namespaces: []string{"gpu-operator"},
-		Selector: metav1.LabelSelector{
-			MatchLabels:      map[string]string{"app": "dcgm"},
-			MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{"metrics"}}},
+	provider, err := NewPodProvider(lister, "node-a", []Source{{
+		Name: "dcgm", Rule: accelerator.RuleNvidiaDCGM, Labels: map[string]string{"model": "A100"},
+		PodMonitor: &MonitorSpec{
+			Namespaces: []string{"gpu-operator"},
+			Selector: LabelSelector{
+				MatchLabels:      map[string]string{"app": "dcgm"},
+				MatchExpressions: []LabelSelectorRequirement{{Key: "role", Operator: "In", Values: []string{"metrics"}}},
+			},
+			Port: "metrics", Path: "/metrics", Scheme: "http",
 		},
-		Port: "metrics", Path: "/metrics", Scheme: "http", Labels: map[string]string{"node": "wrong-node"},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +73,10 @@ func TestPodProviderDiscoversMatchingRunningPods(t *testing.T) {
 		t.Fatalf("targets = %#v", targets)
 	}
 	target := targets[0]
-	if target.Name != "dcgm/gpu-operator/dcgm-a" || target.Address != "http://10.0.0.1:9400/metrics" || target.Labels["node"] != "node-a" {
+	// The node is always the one this process runs on; only the pinned model
+	// survives from the configuration.
+	if target.Name != "dcgm/gpu-operator/dcgm-a" || target.Address != "http://10.0.0.1:9400/metrics" ||
+		target.Labels["node"] != "node-a" || target.Labels["model"] != "A100" {
 		t.Fatalf("unexpected target: %#v", target)
 	}
 	if len(lister.seen) != 1 || lister.seen[0].LabelSelector == "" || lister.seen[0].FieldSelector != "spec.nodeName=node-a" {
@@ -88,10 +94,13 @@ func TestPodProviderSupportsNumericPortAndPartialErrors(t *testing.T) {
 		}}},
 		error: map[string]error{"failed": errors.New("forbidden")},
 	}
-	provider, err := NewPodProvider(lister, "node-vgpu", []PodMonitor{{
-		Name: "vgpu", AcceleratorType: model.AcceleratorTypeVGPU, Namespaces: []string{"ok", "failed"},
-		Selector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "vgpu"}},
-		Port:     "9394", Path: "/metrics", Scheme: "http",
+	provider, err := NewPodProvider(lister, "node-vgpu", []Source{{
+		Name: "vgpu", Rule: accelerator.RuleVolcanoVGPU,
+		PodMonitor: &MonitorSpec{
+			Namespaces: []string{"ok", "failed"},
+			Selector:   LabelSelector{MatchLabels: map[string]string{"app": "vgpu"}},
+			Port:       "9394", Path: "/metrics", Scheme: "http",
+		},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -108,9 +117,13 @@ func TestPodProviderSupportsNumericPortAndPartialErrors(t *testing.T) {
 func TestPodProviderSupportsAnyNamespace(t *testing.T) {
 	t.Parallel()
 	lister := &fakePodLister{pods: map[string][]corev1.Pod{}, error: map[string]error{}}
-	provider, err := NewPodProvider(lister, "node-a", []PodMonitor{{
-		Name: "all-gpus", AcceleratorType: model.AcceleratorTypeGPU, AnyNamespace: true,
-		Selector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "dcgm"}}, Port: "9400", Path: "/metrics", Scheme: "http",
+	provider, err := NewPodProvider(lister, "node-a", []Source{{
+		Name: "all-gpus", Rule: accelerator.RuleNvidiaDCGM,
+		PodMonitor: &MonitorSpec{
+			NamespaceSelector: NamespaceSelector{Any: true},
+			Selector:          LabelSelector{MatchLabels: map[string]string{"app": "dcgm"}},
+			Port:              "9400", Path: "/metrics", Scheme: "http",
+		},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -135,10 +148,10 @@ func TestProvidersRequireNodeName(t *testing.T) {
 
 func TestCompositeKeepsSuccessfulTargetsOnDiscoveryError(t *testing.T) {
 	t.Parallel()
-	target := model.Source{Name: "discovered", Address: "http://host/metrics", AcceleratorType: model.AcceleratorTypeNPU}
+	target := accelerator.Source{Name: "discovered", Address: "http://host/metrics", Rule: accelerator.RuleAscendNPU}
 	provider := Composite(
-		providerFunc(func(context.Context) ([]model.Source, error) { return []model.Source{target}, nil }),
-		providerFunc(func(context.Context) ([]model.Source, error) { return nil, errors.New("discovery failed") }),
+		providerFunc(func(context.Context) ([]accelerator.Source, error) { return []accelerator.Source{target}, nil }),
+		providerFunc(func(context.Context) ([]accelerator.Source, error) { return nil, errors.New("discovery failed") }),
 	)
 	targets, err := provider.Targets(context.Background())
 	if err == nil || len(targets) != 1 || targets[0].Name != "discovered" {
@@ -183,10 +196,13 @@ func TestServiceProviderExpandsMatchingServiceEndpointSlices(t *testing.T) {
 			},
 		}},
 	}
-	provider, err := NewServiceProvider(lister, node, []ServiceMonitor{{
-		Name: "npu-service", AcceleratorType: model.AcceleratorTypeNPU, Namespaces: []string{"npu"},
-		Selector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "npu-exporter"}},
-		Port:     portName, Path: "/metrics", Scheme: "http", Labels: map[string]string{"node": "wrong-node"},
+	provider, err := NewServiceProvider(lister, node, []Source{{
+		Name: "npu-service", Rule: accelerator.RuleAscendNPU,
+		ServiceMonitor: &MonitorSpec{
+			Namespaces: []string{"npu"},
+			Selector:   LabelSelector{MatchLabels: map[string]string{"app": "npu-exporter"}},
+			Port:       Port(portName), Path: "/metrics", Scheme: "http",
+		},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +214,7 @@ func TestServiceProviderExpandsMatchingServiceEndpointSlices(t *testing.T) {
 	if len(targets) != 1 {
 		t.Fatalf("targets = %#v", targets)
 	}
-	if targets[0].Address != "http://10.1.0.1:8082/metrics" || targets[0].Labels["node"] != node || targets[0].AcceleratorType != model.AcceleratorTypeNPU {
+	if targets[0].Address != "http://10.1.0.1:8082/metrics" || targets[0].Labels["node"] != node || targets[0].Rule != accelerator.RuleAscendNPU {
 		t.Fatalf("unexpected target: %#v", targets[0])
 	}
 }

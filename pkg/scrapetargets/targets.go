@@ -1,7 +1,9 @@
-// Package discovery resolves configured source definitions to concrete metrics
-// addresses. It supports node-local PodMonitor- and ServiceMonitor-style
-// Kubernetes selection.
-package discovery
+// Package scrapetargets resolves the configured accelerator metrics sources to
+// the concrete endpoints this node has to scrape.
+//
+// It reads the Node's Pods, Services and EndpointSlices and nothing else: it
+// reports where to scrape, never what was scraped.
+package scrapetargets
 
 import (
 	"context"
@@ -21,19 +23,19 @@ import (
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	typeddiscoveryv1 "k8s.io/client-go/kubernetes/typed/discovery/v1"
 
-	"xiaoshiai.cn/rune/internal/model"
+	"xiaoshiai.cn/accelerator-exporter/pkg/accelerator"
 )
 
-// Provider discovers concrete metrics targets.
+// Provider resolves the metrics endpoints of one node.
 type Provider interface {
-	Targets(context.Context) ([]model.Source, error)
+	Targets(context.Context) ([]accelerator.Source, error)
 }
 
 // Composite combines multiple providers. Targets returned alongside an error
 // remain usable when one Kubernetes discovery provider temporarily fails.
 func Composite(providers ...Provider) Provider {
-	return providerFunc(func(ctx context.Context) ([]model.Source, error) {
-		var targets []model.Source
+	return providerFunc(func(ctx context.Context) ([]accelerator.Source, error) {
+		var targets []accelerator.Source
 		var providerErrors []error
 		for _, provider := range providers {
 			if provider == nil {
@@ -50,23 +52,10 @@ func Composite(providers ...Provider) Provider {
 	})
 }
 
-type providerFunc func(context.Context) ([]model.Source, error)
+type providerFunc func(context.Context) ([]accelerator.Source, error)
 
-func (function providerFunc) Targets(ctx context.Context) ([]model.Source, error) {
+func (function providerFunc) Targets(ctx context.Context) ([]accelerator.Source, error) {
 	return function(ctx)
-}
-
-// PodMonitor describes one PodMonitor-style metrics source.
-type PodMonitor struct {
-	Name            string
-	AcceleratorType string
-	Namespaces      []string
-	AnyNamespace    bool
-	Selector        metav1.LabelSelector
-	Port            string
-	Path            string
-	Scheme          string
-	Labels          map[string]string
 }
 
 // PodLister is the small Kubernetes seam required by PodProvider.
@@ -85,19 +74,6 @@ func NewCorePodLister(client typedcorev1.CoreV1Interface) PodLister {
 
 func (lister *corePodLister) ListPods(ctx context.Context, namespace string, options metav1.ListOptions) (*corev1.PodList, error) {
 	return lister.client.Pods(namespace).List(ctx, options)
-}
-
-// ServiceMonitor describes one ServiceMonitor-style metrics source.
-type ServiceMonitor struct {
-	Name            string
-	AcceleratorType string
-	Namespaces      []string
-	AnyNamespace    bool
-	Selector        metav1.LabelSelector
-	Port            string
-	Path            string
-	Scheme          string
-	Labels          map[string]string
 }
 
 // ServiceEndpointLister is the Kubernetes seam required by ServiceProvider.
@@ -124,15 +100,17 @@ func (lister *serviceEndpointLister) ListEndpointSlices(ctx context.Context, nam
 	return lister.discovery.EndpointSlices(namespace).List(ctx, options)
 }
 
-// PodProvider discovers every running Pod matching each configured selector.
+// PodProvider resolves every Pod-based source to the Pod-IP metrics endpoints of
+// one node. Sources that use a ServiceMonitor are ignored, so the same source
+// list can be handed to every provider.
 type PodProvider struct {
 	lister   PodLister
 	nodeName string
-	monitors []PodMonitor
+	monitors []resolved
 }
 
-// NewPodProvider creates a PodMonitor-style target provider.
-func NewPodProvider(lister PodLister, nodeName string, monitors []PodMonitor) (*PodProvider, error) {
+// NewPodProvider creates the Pod-based target provider.
+func NewPodProvider(lister PodLister, nodeName string, sources []Source) (*PodProvider, error) {
 	if lister == nil {
 		return nil, fmt.Errorf("Pod lister is required")
 	}
@@ -140,34 +118,30 @@ func NewPodProvider(lister PodLister, nodeName string, monitors []PodMonitor) (*
 	if nodeName == "" {
 		return nil, fmt.Errorf("node name is required")
 	}
-	for _, monitor := range monitors {
-		if monitor.Name == "" || monitor.Port == "" || (len(monitor.Namespaces) == 0 && !monitor.AnyNamespace) {
-			return nil, fmt.Errorf("Pod monitor requires name, namespaces, and port")
-		}
-		if _, err := metav1.LabelSelectorAsSelector(&monitor.Selector); err != nil {
-			return nil, fmt.Errorf("Pod monitor %q selector: %w", monitor.Name, err)
-		}
+	monitors, err := normalizeSources(sources, true)
+	if err != nil {
+		return nil, err
 	}
-	return &PodProvider{lister: lister, nodeName: nodeName, monitors: append([]PodMonitor(nil), monitors...)}, nil
+	return &PodProvider{lister: lister, nodeName: nodeName, monitors: monitors}, nil
 }
 
 // Targets resolves matching running Pods to direct Pod-IP metrics URLs.
-func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error) {
-	var targets []model.Source
+func (provider *PodProvider) Targets(ctx context.Context) ([]accelerator.Source, error) {
+	var targets []accelerator.Source
 	var discoveryErrors []error
 	for _, monitor := range provider.monitors {
-		selector, err := metav1.LabelSelectorAsSelector(&monitor.Selector)
+		selector, err := metav1.LabelSelectorAsSelector(&monitor.selector)
 		if err != nil {
-			discoveryErrors = append(discoveryErrors, fmt.Errorf("Pod monitor %q selector: %w", monitor.Name, err))
+			discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q selector: %w", monitor.name, err))
 			continue
 		}
-		for _, namespace := range monitorNamespaces(monitor.Namespaces, monitor.AnyNamespace) {
+		for _, namespace := range monitor.queryNamespaces() {
 			pods, err := provider.lister.ListPods(ctx, namespace, metav1.ListOptions{
 				LabelSelector: selector.String(),
 				FieldSelector: fields.OneTermEqualSelector("spec.nodeName", provider.nodeName).String(),
 			})
 			if err != nil {
-				discoveryErrors = append(discoveryErrors, fmt.Errorf("Pod monitor %q list namespace %q: %w", monitor.Name, namespace, err))
+				discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q list namespace %q: %w", monitor.name, namespace, err))
 				continue
 			}
 			for index := range pods.Items {
@@ -175,23 +149,21 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error
 				if pod.Spec.NodeName != provider.nodeName || !podMatches(pod, selector) || pod.Status.Phase != corev1.PodRunning || pod.Status.PodIP == "" {
 					continue
 				}
-				port, ok := resolvePort(pod, monitor.Port)
+				port, ok := resolvePort(pod, monitor.port)
 				if !ok {
-					discoveryErrors = append(discoveryErrors, fmt.Errorf("Pod monitor %q Pod %s/%s has no container port %q", monitor.Name, pod.Namespace, pod.Name, monitor.Port))
+					discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q Pod %s/%s has no container port %q", monitor.name, pod.Namespace, pod.Name, monitor.port))
 					continue
 				}
-				labels := cloneLabels(monitor.Labels)
-				labels["node"] = provider.nodeName
 				endpoint := url.URL{
-					Scheme: monitor.Scheme,
+					Scheme: monitor.scheme,
 					Host:   net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(port))),
-					Path:   monitor.Path,
+					Path:   monitor.path,
 				}
-				targets = append(targets, model.Source{
-					Name:            monitor.Name + "/" + pod.Namespace + "/" + pod.Name,
-					Address:         endpoint.String(),
-					AcceleratorType: monitor.AcceleratorType,
-					Labels:          labels,
+				targets = append(targets, accelerator.Source{
+					Name:    monitor.name + "/" + pod.Namespace + "/" + pod.Name,
+					Address: endpoint.String(),
+					Rule:    monitor.rule,
+					Labels:  sourceLabels(monitor, provider.nodeName),
 				})
 			}
 		}
@@ -200,16 +172,16 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]model.Source, error
 	return targets, errors.Join(discoveryErrors...)
 }
 
-// ServiceProvider discovers Services by label and expands each Service through
+// ServiceProvider resolves Services by label and expands each Service through
 // EndpointSlices so every backend metrics endpoint is scraped directly.
 type ServiceProvider struct {
 	lister   ServiceEndpointLister
 	nodeName string
-	monitors []ServiceMonitor
+	monitors []resolved
 }
 
-// NewServiceProvider creates a ServiceMonitor-style target provider.
-func NewServiceProvider(lister ServiceEndpointLister, nodeName string, monitors []ServiceMonitor) (*ServiceProvider, error) {
+// NewServiceProvider creates the Service-based target provider.
+func NewServiceProvider(lister ServiceEndpointLister, nodeName string, sources []Source) (*ServiceProvider, error) {
 	if lister == nil {
 		return nil, fmt.Errorf("Service and EndpointSlice lister is required")
 	}
@@ -217,31 +189,27 @@ func NewServiceProvider(lister ServiceEndpointLister, nodeName string, monitors 
 	if nodeName == "" {
 		return nil, fmt.Errorf("node name is required")
 	}
-	for _, monitor := range monitors {
-		if monitor.Name == "" || monitor.Port == "" || (len(monitor.Namespaces) == 0 && !monitor.AnyNamespace) {
-			return nil, fmt.Errorf("Service monitor requires name, namespaces, and port")
-		}
-		if _, err := metav1.LabelSelectorAsSelector(&monitor.Selector); err != nil {
-			return nil, fmt.Errorf("Service monitor %q selector: %w", monitor.Name, err)
-		}
+	monitors, err := normalizeSources(sources, false)
+	if err != nil {
+		return nil, err
 	}
-	return &ServiceProvider{lister: lister, nodeName: nodeName, monitors: append([]ServiceMonitor(nil), monitors...)}, nil
+	return &ServiceProvider{lister: lister, nodeName: nodeName, monitors: monitors}, nil
 }
 
 // Targets resolves selected Services to ready EndpointSlice addresses.
-func (provider *ServiceProvider) Targets(ctx context.Context) ([]model.Source, error) {
-	targetsByName := map[string]model.Source{}
+func (provider *ServiceProvider) Targets(ctx context.Context) ([]accelerator.Source, error) {
+	targetsByName := map[string]accelerator.Source{}
 	var discoveryErrors []error
 	for _, monitor := range provider.monitors {
-		selector, err := metav1.LabelSelectorAsSelector(&monitor.Selector)
+		selector, err := metav1.LabelSelectorAsSelector(&monitor.selector)
 		if err != nil {
-			discoveryErrors = append(discoveryErrors, fmt.Errorf("Service monitor %q selector: %w", monitor.Name, err))
+			discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q selector: %w", monitor.name, err))
 			continue
 		}
-		for _, namespace := range monitorNamespaces(monitor.Namespaces, monitor.AnyNamespace) {
+		for _, namespace := range monitor.queryNamespaces() {
 			services, err := provider.lister.ListServices(ctx, namespace, metav1.ListOptions{LabelSelector: selector.String()})
 			if err != nil {
-				discoveryErrors = append(discoveryErrors, fmt.Errorf("Service monitor %q list namespace %q: %w", monitor.Name, namespace, err))
+				discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q list namespace %q: %w", monitor.name, namespace, err))
 				continue
 			}
 			for serviceIndex := range services.Items {
@@ -249,15 +217,15 @@ func (provider *ServiceProvider) Targets(ctx context.Context) ([]model.Source, e
 				if !selector.Matches(labels.Set(service.Labels)) {
 					continue
 				}
-				portName, ok := resolveServicePort(service, monitor.Port)
+				portName, ok := resolveServicePort(service, monitor.port)
 				if !ok {
-					discoveryErrors = append(discoveryErrors, fmt.Errorf("Service monitor %q Service %s/%s has no port %q", monitor.Name, service.Namespace, service.Name, monitor.Port))
+					discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q Service %s/%s has no port %q", monitor.name, service.Namespace, service.Name, monitor.port))
 					continue
 				}
 				sliceSelector := labels.Set{discoveryv1.LabelServiceName: service.Name}.AsSelector().String()
 				slices, err := provider.lister.ListEndpointSlices(ctx, service.Namespace, metav1.ListOptions{LabelSelector: sliceSelector})
 				if err != nil {
-					discoveryErrors = append(discoveryErrors, fmt.Errorf("Service monitor %q list EndpointSlices for %s/%s: %w", monitor.Name, service.Namespace, service.Name, err))
+					discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q list EndpointSlices for %s/%s: %w", monitor.name, service.Namespace, service.Name, err))
 					continue
 				}
 				for sliceIndex := range slices.Items {
@@ -267,23 +235,25 @@ func (provider *ServiceProvider) Targets(ctx context.Context) ([]model.Source, e
 					}
 					endpointPort, ok := resolveEndpointSlicePort(slice, portName)
 					if !ok {
-						discoveryErrors = append(discoveryErrors, fmt.Errorf("Service monitor %q EndpointSlice %s/%s has no port for Service port %q", monitor.Name, slice.Namespace, slice.Name, monitor.Port))
+						discoveryErrors = append(discoveryErrors, fmt.Errorf("source %q EndpointSlice %s/%s has no port for Service port %q", monitor.name, slice.Namespace, slice.Name, monitor.port))
 						continue
 					}
 					for _, endpoint := range slice.Endpoints {
 						if endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready {
 							continue
 						}
+						// An endpoint without a nodeName belongs to no node, and
+						// guessing would scrape another node's device metrics.
 						if endpoint.NodeName == nil || *endpoint.NodeName != provider.nodeName {
 							continue
 						}
 						for _, address := range endpoint.Addresses {
-							labels := cloneLabels(monitor.Labels)
-							labels["node"] = provider.nodeName
-							metricsURL := url.URL{Scheme: monitor.Scheme, Host: net.JoinHostPort(address, strconv.Itoa(int(endpointPort))), Path: monitor.Path}
-							name := monitor.Name + "/" + service.Namespace + "/" + service.Name + "/" + net.JoinHostPort(address, strconv.Itoa(int(endpointPort)))
-							targetsByName[name] = model.Source{
-								Name: name, Address: metricsURL.String(), AcceleratorType: monitor.AcceleratorType, Labels: labels,
+							host := net.JoinHostPort(address, strconv.Itoa(int(endpointPort)))
+							metricsURL := url.URL{Scheme: monitor.scheme, Host: host, Path: monitor.path}
+							name := monitor.name + "/" + service.Namespace + "/" + service.Name + "/" + host
+							targetsByName[name] = accelerator.Source{
+								Name: name, Address: metricsURL.String(), Rule: monitor.rule,
+								Labels: sourceLabels(monitor, provider.nodeName),
 							}
 						}
 					}
@@ -291,12 +261,25 @@ func (provider *ServiceProvider) Targets(ctx context.Context) ([]model.Source, e
 			}
 		}
 	}
-	targets := make([]model.Source, 0, len(targetsByName))
+	targets := make([]accelerator.Source, 0, len(targetsByName))
 	for _, target := range targetsByName {
 		targets = append(targets, target)
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Name < targets[j].Name })
 	return targets, errors.Join(discoveryErrors...)
+}
+
+// sourceLabels is the label set every target of one source carries. The node is
+// the one this process runs on; a source can only pin the model.
+func sourceLabels(monitor resolved, nodeName string) map[string]string {
+	labels := make(map[string]string, len(monitor.labels)+1)
+	for name, value := range monitor.labels {
+		if value != "" {
+			labels[name] = value
+		}
+	}
+	labels[accelerator.LabelNode] = nodeName
+	return labels
 }
 
 func podMatches(pod *corev1.Pod, selector labels.Selector) bool {
@@ -354,19 +337,4 @@ func uniqueStrings(values []string) []string {
 		result = append(result, value)
 	}
 	return result
-}
-
-func monitorNamespaces(namespaces []string, anyNamespace bool) []string {
-	if anyNamespace {
-		return []string{metav1.NamespaceAll}
-	}
-	return uniqueStrings(namespaces)
-}
-
-func cloneLabels(source map[string]string) map[string]string {
-	cloned := make(map[string]string, len(source)+1)
-	for name, value := range source {
-		cloned[name] = value
-	}
-	return cloned
 }

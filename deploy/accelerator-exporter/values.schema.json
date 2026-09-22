@@ -3,16 +3,28 @@
   "title": "Accelerator Exporter",
   "description": "以 DaemonSet 部署统一 GPU、NPU、vGPU、vNPU 节点指标采集服务。",
   "type": "object",
-  "required": ["config", "containerPort", "service", "metrics"],
+  "required": [
+    "config",
+    "containerPort",
+    "service",
+    "metrics",
+    "podResources"
+  ],
   "properties": {
     "config": {
       "type": "object",
       "title": "采集配置",
       "description": "选择需要采集的加速卡指标源，并配置采集频率。",
-      "required": ["scrapeInterval", "scrapeTimeout", "maxConcurrency"],
+      "required": [
+        "scrapeInterval",
+        "scrapeTimeout",
+        "maxConcurrency"
+      ],
       "anyOf": [
         {
-          "required": ["sources"],
+          "required": [
+            "sources"
+          ],
           "properties": {
             "sources": {
               "minItems": 1
@@ -20,7 +32,9 @@
           }
         },
         {
-          "required": ["customSources"],
+          "required": [
+            "customSources"
+          ],
           "properties": {
             "customSources": {
               "minItems": 1
@@ -33,15 +47,27 @@
           "type": "array",
           "title": "底层指标源",
           "description": "选择集群中已经安装的指标采集组件。",
-          "default": ["nvidia-dcgm", "volcano-vgpu", "ascend-npu", "ascend-vnpu"],
+          "default": [
+            "nvidia-dcgm",
+            "volcano-vgpu",
+            "ascend-npu"
+          ],
           "uniqueItems": true,
           "x-value-type": "string-array",
           "x-render": "multi-enum",
           "x-cols": 12,
           "items": {
             "type": "string",
-            "enum": ["nvidia-dcgm", "volcano-vgpu", "ascend-npu", "ascend-vnpu"],
-            "enumNames": ["NVIDIA GPU（DCGM）", "Volcano vGPU", "Ascend NPU", "Ascend vNPU"]
+            "enum": [
+              "nvidia-dcgm",
+              "volcano-vgpu",
+              "ascend-npu"
+            ],
+            "enumNames": [
+              "NVIDIA GPU（DCGM）",
+              "Volcano vGPU",
+              "Ascend NPU"
+            ]
           }
         },
         "customSources": {
@@ -52,18 +78,35 @@
           "x-hidden": true,
           "items": {
             "type": "object",
-            "required": ["name", "acceleratorType"],
+            "required": [
+              "name",
+              "rule"
+            ],
             "not": {
-              "required": ["address"]
+              "required": [
+                "address"
+              ]
             },
             "oneOf": [
               {
-                "required": ["podMonitor"],
-                "not": {"required": ["serviceMonitor"]}
+                "required": [
+                  "podMonitor"
+                ],
+                "not": {
+                  "required": [
+                    "serviceMonitor"
+                  ]
+                }
               },
               {
-                "required": ["serviceMonitor"],
-                "not": {"required": ["podMonitor"]}
+                "required": [
+                  "serviceMonitor"
+                ],
+                "not": {
+                  "required": [
+                    "podMonitor"
+                  ]
+                }
               }
             ]
           }
@@ -107,12 +150,18 @@
       "title": "服务配置",
       "description": "配置集群内访问 Accelerator Exporter 的 Service。",
       "additionalProperties": false,
-      "required": ["type", "port", "annotations"],
+      "required": [
+        "type",
+        "port",
+        "annotations"
+      ],
       "properties": {
         "type": {
           "type": "string",
           "title": "服务类型",
-          "enum": ["ClusterIP"],
+          "enum": [
+            "ClusterIP"
+          ],
           "default": "ClusterIP"
         },
         "port": {
@@ -133,13 +182,17 @@
       "title": "监控配置",
       "description": "配置 Prometheus Operator 对统一指标端点的采集。",
       "additionalProperties": false,
-      "required": ["serviceMonitor"],
+      "required": [
+        "serviceMonitor"
+      ],
       "properties": {
         "serviceMonitor": {
           "type": "object",
           "title": "Prometheus ServiceMonitor",
           "additionalProperties": false,
-          "required": ["enabled"],
+          "required": [
+            "enabled"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -150,31 +203,46 @@
               "type": "string",
               "title": "ServiceMonitor 命名空间",
               "description": "留空时使用当前 Helm Release 的命名空间。",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false}
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              }
             },
             "interval": {
               "type": "string",
               "title": "Prometheus 采集间隔",
               "minLength": 2,
               "default": "30s",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false}
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              }
             },
             "scrapeTimeout": {
               "type": "string",
               "title": "Prometheus 采集超时",
               "minLength": 2,
               "default": "10s",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false}
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              }
             },
             "additionalLabels": {
               "title": "附加标签",
               "$ref": "#/$defs/stringMap",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false}
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              }
             },
             "relabelings": {
               "type": "array",
               "title": "目标重标记规则",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false},
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              },
               "items": {
                 "type": "object"
               }
@@ -182,12 +250,29 @@
             "metricRelabelings": {
               "type": "array",
               "title": "指标重标记规则",
-              "x-hidden": {"path": "$.metrics.serviceMonitor.enabled", "value": false},
+              "x-hidden": {
+                "path": "$.metrics.serviceMonitor.enabled",
+                "value": false
+              },
               "items": {
                 "type": "object"
               }
             }
           }
+        }
+      }
+    },
+    "podResources": {
+      "type": "object",
+      "title": "设备分配事实",
+      "description": "从 kubelet pod-resources socket 读取 Pod 与设备的分配关系，用于生成 accelerator_pod_info。目录以只读方式挂载到容器内同名路径。",
+      "properties": {
+        "hostPath": {
+          "type": "string",
+          "title": "pod-resources 目录",
+          "description": "宿主机上 kubelet pod-resources socket 所在目录。留空表示该集群不暴露该接口，导出器将只产出设备层指标。",
+          "default": "/var/lib/kubelet/pod-resources",
+          "x-cols": 12
         }
       }
     }
