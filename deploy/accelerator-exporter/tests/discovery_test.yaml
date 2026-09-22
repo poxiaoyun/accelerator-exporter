@@ -1,4 +1,4 @@
-suite: NVIDIA DCGM namespace discovery
+suite: source configuration
 templates:
   - templates/configmap.yaml
 tests:
@@ -10,14 +10,49 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'name: volcano-vgpu-device-plugin\s+podMonitor:\s+namespaceSelector:\s+matchNames:\s+- kube-system'
-  - it: honors an explicit namespace override instead of appending defaults
+  - it: keeps the order the sources are configured in
     set:
-      config.sources: [nvidia-dcgm]
-      config.sourceDefinitions.nvidia-dcgm.serviceMonitor.namespaceSelector.matchNames: [custom-gpu]
+      config.sources:
+        - name: npu-exporter
+          rule: ascend-npu
+          serviceMonitor:
+            namespaceSelector:
+              matchNames: [npu-exporter]
+            selector:
+              matchLabels:
+                app: npu-exporter
+            port: http-metrics
+        - name: nvidia-dcgm-exporter
+          rule: nvidia-dcgm
+          serviceMonitor:
+            namespaceSelector:
+              matchNames: [rune-system]
+            selector:
+              matchLabels:
+                app: nvidia-dcgm-exporter
+            port: gpu-metrics
+    asserts:
+      # The order is the precedence between sources, so the rendered config has
+      # to keep it instead of sorting the entry names.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '(?s)sources:\n\s+- name: npu-exporter.*- name: nvidia-dcgm-exporter'
+  - it: renders only the sources that are configured
+    set:
+      config.sources:
+        - name: nvidia-dcgm-exporter
+          rule: nvidia-dcgm
+          serviceMonitor:
+            namespaceSelector:
+              matchNames: [custom-gpu]
+            selector:
+              matchLabels:
+                app: nvidia-dcgm-exporter
+            port: gpu-metrics
     asserts:
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'matchNames:\s+- custom-gpu\s+path: /metrics'
+          pattern: 'name: nvidia-dcgm-exporter\s+rule: nvidia-dcgm\s+serviceMonitor:\s+namespaceSelector:\s+matchNames:\s+- custom-gpu'
       - notMatchRegex:
           path: data["config.yaml"]
-          pattern: 'rune-system|gpu-operator|volcano-vgpu-device-plugin'
+          pattern: 'rune-system|gpu-operator|volcano-vgpu-device-plugin|npu-exporter'

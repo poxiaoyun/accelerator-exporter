@@ -41,15 +41,3 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag }}
 {{- end }}
-
-{{- define "accelerator-exporter.sources" -}}
-{{- $sources := list -}}
-{{- range $preset := .Values.config.sources -}}
-{{- $source := required (printf "config.sources contains unknown preset %q" $preset) (index $.Values.config.sourceDefinitions $preset) -}}
-{{- $sources = append $sources $source -}}
-{{- end -}}
-{{- range .Values.config.customSources -}}
-{{- $sources = append $sources . -}}
-{{- end -}}
-{{- toYaml $sources -}}
-{{- end }}

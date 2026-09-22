@@ -10,6 +10,11 @@ package accelerator
 
 const bytesPerMiB = 1024 * 1024
 
+// nvidiaGPUResource is the extended resource a whole NVIDIA GPU is allocated
+// under. Both NVIDIA rules declare it: DCGM reads the card from the driver and
+// the vGPU monitor reads it from its own sampler, and a card is the same card.
+const nvidiaGPUResource = "nvidia.com/gpu"
+
 var nvidiaDCGMRule = Rule{
 	Name:   RuleNvidiaDCGM,
 	Vendor: VendorNVIDIA,
@@ -95,9 +100,9 @@ var nvidiaDCGMRule = Rule{
 			deriveHealthState("DCGM_EXP_GPU_HEALTH_STATUS", "DCGM_FI_DEV_XID_ERRORS", "DCGM_FI_DEV_ROW_REMAP_FAILURE"),
 		},
 		NativeResources: []NativeResource{{
-			Names:    []string{"nvidia.com/gpu"},
+			Names:    []string{nvidiaGPUResource},
 			Mode:     DeviceModePhysical,
-			DeviceID: func(raw map[string]string) string { return first(raw, "UUID", "uuid") },
+			DeviceID: func(_ Environment, raw map[string]string) string { return first(raw, "UUID", "uuid") },
 		}},
 		// TODO(real-machine): MIG partitions are allocated under their own
 		// extended resource names and the device plugin reports MIG device
@@ -132,7 +137,7 @@ var dcgmSeverities = map[string]string{
 // allows only for a source that cannot give an instance identifier. If DCGM
 // does expose a stable MIG instance UUID, device_id must take that value
 // instead and the composition must be dropped.
-func identifyNVIDIAGPU(raw map[string]string, source Source, _ Inventory) Identity {
+func identifyNVIDIAGPU(env Environment, raw map[string]string) Identity {
 	device := first(raw, "UUID", "uuid")
 	if device == "" {
 		// TODO(real-machine): confirm DCGM always labels samples with UUID.
@@ -141,8 +146,8 @@ func identifyNVIDIAGPU(raw map[string]string, source Source, _ Inventory) Identi
 		device = first(raw, "device")
 	}
 	identity := Identity{
-		Node:          firstNonEmpty(first(raw, "node", "Hostname", "hostname"), source.Labels[LabelNode]),
-		Model:         firstNonEmpty(first(raw, "model", "modelName", "model_name"), source.Labels[LabelModel]),
+		Node:          firstNonEmpty(first(raw, "node", "Hostname", "hostname"), env.Source.Labels[LabelNode]),
+		Model:         firstNonEmpty(first(raw, "model", "modelName", "model_name"), env.Source.Labels[LabelModel]),
 		DeviceType:    DeviceTypeGPU,
 		DeviceMode:    DeviceModePhysical,
 		Vendor:        VendorNVIDIA,

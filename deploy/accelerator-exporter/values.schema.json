@@ -14,101 +14,24 @@
     "config": {
       "type": "object",
       "title": "采集配置",
-      "description": "选择需要采集的加速卡指标源，并配置采集频率。",
+      "description": "配置要采集的加速卡指标源及采集频率。",
       "required": [
+        "sources",
         "scrapeInterval",
         "scrapeTimeout",
         "maxConcurrency"
       ],
-      "anyOf": [
-        {
-          "required": [
-            "sources"
-          ],
-          "properties": {
-            "sources": {
-              "minItems": 1
-            }
-          }
-        },
-        {
-          "required": [
-            "customSources"
-          ],
-          "properties": {
-            "customSources": {
-              "minItems": 1
-            }
-          }
-        }
-      ],
       "properties": {
         "sources": {
           "type": "array",
-          "title": "底层指标源",
-          "description": "选择集群中已经安装的指标采集组件。",
-          "default": [
-            "nvidia-dcgm",
-            "volcano-vgpu",
-            "ascend-npu"
-          ],
-          "uniqueItems": true,
-          "x-value-type": "string-array",
-          "x-render": "multi-enum",
+          "title": "指标源",
+          "description": "全部受支持的指标源默认已开启，无需选择：组件没装的源发现不到端点，等于没配。这里只用于覆盖非标准安装的发现参数。排在前面的源优先，两个源覆盖同一观测目标上的同一个指标时，后者的读数按重复丢弃。",
+          "minItems": 1,
+          "x-hidden": true,
+          "x-value-type": "object-array",
           "x-cols": 12,
           "items": {
-            "type": "string",
-            "enum": [
-              "nvidia-dcgm",
-              "volcano-vgpu",
-              "ascend-npu"
-            ],
-            "enumNames": [
-              "NVIDIA GPU（DCGM）",
-              "Volcano vGPU",
-              "Ascend NPU"
-            ]
-          }
-        },
-        "customSources": {
-          "type": "array",
-          "title": "自定义指标源",
-          "description": "供非标准安装场景注入 PodMonitor 或 ServiceMonitor 指标源定义，不支持静态地址。",
-          "default": [],
-          "x-hidden": true,
-          "items": {
-            "type": "object",
-            "required": [
-              "name",
-              "rule"
-            ],
-            "not": {
-              "required": [
-                "address"
-              ]
-            },
-            "oneOf": [
-              {
-                "required": [
-                  "podMonitor"
-                ],
-                "not": {
-                  "required": [
-                    "serviceMonitor"
-                  ]
-                }
-              },
-              {
-                "required": [
-                  "serviceMonitor"
-                ],
-                "not": {
-                  "required": [
-                    "podMonitor"
-                  ]
-                }
-              }
-            ]
+            "$ref": "#/$defs/source"
           }
         },
         "scrapeInterval": {
@@ -270,7 +193,7 @@
         "hostPath": {
           "type": "string",
           "title": "pod-resources 目录",
-          "description": "宿主机上 kubelet pod-resources socket 所在目录。留空表示该集群不暴露该接口，导出器将只产出设备层指标。",
+          "description": "宿主机上 kubelet pod-resources socket 所在目录。留空表示该集群不暴露该接口：关系层为空，身份来自样本的源照常产出设备层，volcano-vgpu 例外 —— 切片编号只在分配事实里，它拿不到编号。",
           "default": "/var/lib/kubelet/pod-resources",
           "x-cols": 12
         }
@@ -284,6 +207,157 @@
         "type": "string"
       },
       "default": {}
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "name",
+        "rule"
+      ],
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "address"
+        ]
+      },
+      "oneOf": [
+        {
+          "required": [
+            "podMonitor"
+          ],
+          "not": {
+            "required": [
+              "serviceMonitor"
+            ]
+          }
+        },
+        {
+          "required": [
+            "serviceMonitor"
+          ],
+          "not": {
+            "required": [
+              "podMonitor"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "源名称",
+          "description": "这一份配置的名字，取采集源的组件名。它成为每个抓取目标名的前缀，也是 accelerator_exporter_* 的 source 取值。",
+          "minLength": 1
+        },
+        "rule": {
+          "type": "string",
+          "title": "采集规则",
+          "description": "内置规则名，它决定 device_type、device_mode、vendor 以及每个观测目标的身份。",
+          "enum": [
+            "nvidia-dcgm",
+            "volcano-vgpu",
+            "ascend-npu"
+          ]
+        },
+        "labels": {
+          "type": "object",
+          "title": "固定标签",
+          "description": "只允许钉住 model，供本族指标不带型号的源使用。node 永远是本进程所在的节点，其余标签由样本解析。",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "title": "型号"
+            }
+          }
+        },
+        "podMonitor": {
+          "$ref": "#/$defs/monitorSpec",
+          "title": "按 Pod 发现"
+        },
+        "serviceMonitor": {
+          "$ref": "#/$defs/monitorSpec",
+          "title": "按 Service 发现"
+        }
+      }
+    },
+    "monitorSpec": {
+      "type": "object",
+      "required": [
+        "selector",
+        "port"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "namespaces": {
+          "type": "array",
+          "title": "命名空间",
+          "items": {
+            "type": "string"
+          }
+        },
+        "namespaceSelector": {
+          "type": "object",
+          "title": "命名空间选择器",
+          "additionalProperties": false,
+          "properties": {
+            "any": {
+              "type": "boolean",
+              "title": "全部命名空间",
+              "description": "与 matchNames 互斥。"
+            },
+            "matchNames": {
+              "type": "array",
+              "title": "命名空间列表",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "selector": {
+          "type": "object",
+          "title": "标签选择器",
+          "required": [
+            "matchLabels"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "matchLabels": {
+              "title": "精确匹配",
+              "$ref": "#/$defs/stringMap"
+            },
+            "matchExpressions": {
+              "type": "array",
+              "title": "表达式匹配",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "port": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "title": "端口",
+          "description": "容器或 Service 的端口名，或端口号。"
+        },
+        "path": {
+          "type": "string",
+          "title": "指标路径",
+          "description": "留空时为 /metrics。"
+        },
+        "scheme": {
+          "type": "string",
+          "title": "协议",
+          "enum": [
+            "http",
+            "https"
+          ]
+        }
+      }
     }
   }
 }

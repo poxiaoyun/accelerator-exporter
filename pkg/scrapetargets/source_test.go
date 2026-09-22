@@ -147,13 +147,18 @@ func TestSourceResolveAppliesDefaults(t *testing.T) {
 	source := podSource(func(source *Source) {
 		source.PodMonitor.NamespaceSelector = NamespaceSelector{MatchNames: []string{"other"}}
 	})
-	resolved := source.resolve(*source.PodMonitor)
+	resolved := source.resolve(*source.PodMonitor, 3)
 
 	if resolved.path != "/metrics" || resolved.scheme != "http" || resolved.port != "metrics" {
 		t.Fatalf("defaults not applied: %#v", resolved)
 	}
 	if resolved.name != "dcgm" || resolved.rule != accelerator.RuleNvidiaDCGM {
 		t.Fatalf("source identity was not carried over: %#v", resolved)
+	}
+	// The configuration position travels with the monitor: it is the precedence
+	// between sources that report the same observation target.
+	if resolved.order != 3 {
+		t.Fatalf("order = %d, want the configured position", resolved.order)
 	}
 	// Both ways of naming namespaces are merged and de-duplicated.
 	if len(resolved.namespaces) != 2 || resolved.namespaces[0] != "rune-system" || resolved.namespaces[1] != "other" {

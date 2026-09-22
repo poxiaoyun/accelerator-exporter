@@ -85,9 +85,9 @@ func TestNVIDIADCGMHealthSeverityFanIn(t *testing.T) {
 			health := withLabels(dcgmLabels(), test.labels)
 			health["health_error_code"] = "DCGM_FR_TEST"
 			health["health_error_category"] = "HARDWARE_MEMORY"
-			result := ruleFor(t, RuleNvidiaDCGM).Apply(Source{Name: "dcgm", Rule: RuleNvidiaDCGM}, Families{
+			result := ruleFor(t, RuleNvidiaDCGM).Apply(Environment{Source: Source{Name: "dcgm", Rule: RuleNvidiaDCGM}}, Families{
 				"DCGM_EXP_GPU_HEALTH_STATUS": {{Labels: health, Value: test.value}},
-			}, nil)
+			})
 			state := findSample(t, result.Samples, "accelerator_health_state")
 			if state.Labels["state"] != test.want || state.Value != 1 {
 				t.Fatalf("state = %#v, want %s", state, test.want)
@@ -112,9 +112,9 @@ func TestNVIDIADCGMProducesNoHealthStateWithoutAHealthSource(t *testing.T) {
 	if len(findSamples(t, result.Samples, "accelerator_health_state")) == 0 {
 		t.Fatal("a health source was present, so a state was expected")
 	}
-	quiet := ruleFor(t, RuleNvidiaDCGM).Apply(Source{Name: "dcgm", Rule: RuleNvidiaDCGM}, Families{
+	quiet := ruleFor(t, RuleNvidiaDCGM).Apply(Environment{Source: Source{Name: "dcgm", Rule: RuleNvidiaDCGM}}, Families{
 		"DCGM_FI_DEV_GPU_UTIL": {{Labels: dcgmLabels(), Value: 10}},
-	}, nil)
+	})
 	if samples := findSamples(t, quiet.Samples, "accelerator_health_state"); len(samples) != 0 {
 		t.Fatalf("no health source must produce no state, got %#v", samples)
 	}
@@ -178,10 +178,10 @@ func TestNVIDIADCGMTotalIsTheDeviceCapacity(t *testing.T) {
 func TestNVIDIADCGMFallsBackToDerivedTotalWithoutReserved(t *testing.T) {
 	t.Parallel()
 	labels := dcgmLabels()
-	result := ruleFor(t, RuleNvidiaDCGM).Apply(Source{Name: "dcgm", Rule: RuleNvidiaDCGM}, Families{
+	result := ruleFor(t, RuleNvidiaDCGM).Apply(Environment{Source: Source{Name: "dcgm", Rule: RuleNvidiaDCGM}}, Families{
 		"DCGM_FI_DEV_FB_USED": {{Labels: labels, Value: 1024}},
 		"DCGM_FI_DEV_FB_FREE": {{Labels: labels, Value: 9216}},
-	}, nil)
+	})
 	if total := findSample(t, result.Samples, "accelerator_memory_total_bytes"); total.Value != 10240*bytesPerMiB {
 		t.Fatalf("total = %v, want the derived used + free", total.Value)
 	}

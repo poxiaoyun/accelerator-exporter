@@ -45,12 +45,15 @@
   accelerator_memory_used_bytes{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 2.097152e+06
   accelerator_memory_utilization_percentage{device_id=100,device_mode=virtual,device_type=npu,model=Ascend 910B,node=node-npu,vendor=huawei} 25
 == volcano-vgpu
-  accelerator_core_utilization_percentage{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 66
-  accelerator_info{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 1
-  accelerator_memory_free_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 4.294967296e+09
-  accelerator_memory_total_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 8.589934592e+09
-  accelerator_memory_used_bytes{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 4.294967296e+09
-  accelerator_memory_utilization_percentage{device_id=slice-1,device_mode=virtual,device_type=gpu,model=L40,node=node-gpu,parent_device_id=GPU-2,vendor=nvidia} 50
+  accelerator_core_utilization_percentage{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,device_mode=physical,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,vendor=nvidia} 0
+  accelerator_core_utilization_percentage{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 0
+  accelerator_info{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,device_mode=physical,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,vendor=nvidia} 1
+  accelerator_info{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 1
+  accelerator_memory_free_bytes{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 6.4879616e+07
+  accelerator_memory_total_bytes{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 4.294967296e+09
+  accelerator_memory_used_bytes{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,device_mode=physical,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,vendor=nvidia} 5.044830208e+09
+  accelerator_memory_used_bytes{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 4.23008768e+09
+  accelerator_memory_utilization_percentage{device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5-1,device_mode=virtual,device_type=gpu,model=NVIDIA GeForce RTX 3080,node=ubuntu,parent_device_id=GPU-8eb35402-7611-4de7-519d-10320e5fe3a5,vendor=nvidia} 98.48940372467041
 == canonical-passthrough
   accelerator_info{device_id=GPU-1,device_mode=physical,device_type=gpu,driver_version=550.90.07,model=NVIDIA A100-SXM4-80GB,node=node-gpu,pci_bus_id=00000000:07:00.0,vendor=nvidia} 1
   accelerator_io_utilization_percentage{device_id=GPU-1,device_mode=physical,device_type=gpu,model=NVIDIA A100-SXM4-80GB,node=node-gpu,vendor=nvidia} 12

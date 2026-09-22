@@ -25,6 +25,9 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 
 ## 配置
 
+以下是一个配置文件的内容。用内置 Chart 部署时不必写这些：默认已经开启全部受支持的指标源
+（见 [Helm 部署](#helm-部署)），只有非标准安装才需要覆盖。
+
 每个数据源需要唯一的 `name` 和 `rule`，并且在 `podMonitor`、`serviceMonitor`
 中配置且只配置一种发现方式。服务按节点运行，不支持静态地址。
 
@@ -39,11 +42,18 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 | rule | 采集源 | 能产出的观测目标 |
 | :--- | :--- | :--- |
 | `nvidia-dcgm` | NVIDIA DCGM exporter | `gpu` 的整卡（`physical`）与 MIG 切分（`partition`） |
-| `volcano-vgpu` | Volcano vGPU monitor | `gpu` 的 vGPU 实例（`virtual`） |
+| `volcano-vgpu` | Volcano vGPU monitor | `gpu` 的 vGPU 实例（`virtual`），以及这些实例所在的整卡（`physical`） |
 | `ascend-npu` | 华为 npu-exporter | `npu` 的整卡（`physical`）与 vNPU（`virtual`） |
 
 `ascend-npu` 一条规则覆盖 npu-exporter 的整卡与 vNPU 两族指标，所以同一个端点只配一次；
 配成两条只会把同一端点抓两遍。
+
+`sources` 是**数组，顺序就是优先级**。两个源都可能覆盖同一观测目标上的同一个指标时
+（例如整卡利用率与整卡显存用量，DCGM 从驱动读、vGPU monitor 从自己的采样器读），
+**配置在前的源优先**，后面那个按重复丢弃并计入 `accelerator_exporter_duplicate_samples_total`。
+胜负不取决于源名，也不取决于哪次抓取先完成。Chart 的默认顺序已按此排好：DCGM 在前。
+
+只配 `volcano-vgpu` 时它自己提供整卡读数，但没有整卡显存总量 —— 该 monitor 不报。
 
 ```yaml
 listenAddress: ":9400"
@@ -118,6 +128,10 @@ socket 不存在或不可读时，导出器照常产出**整个设备层**，只
 `accelerator_exporter_allocation_source_up`（最近一次读是否成功）区分，并在每轮重试，
 所以 kubelet 后起来不需要重启容器。
 
+例外是 `volcano-vgpu`：切片的编号只存在于分配事实里，读不到时该源没有 `device_id`，
+设备层的这些序列会作为身份缺口上报（`missing_identity`），不会用猜出来的编号顶替。
+原因见 `DESIGN.md` 第 9.1 节。
+
 进程默认读取集群内 ServiceAccount；本地运行可在配置顶层设置 `kubeconfig`。
 ServiceAccount 需要以下指标发现、Pod 元数据和 CPU 型号上报权限（`pods` 的 `get`
 同时用于发现本节点 Pod 和补齐 `pod_uid`）：
@@ -172,14 +186,19 @@ exporter 自身的自监控指标：
 
 项目内置 Chart：[`deploy/accelerator-exporter`](deploy/accelerator-exporter)。Chart
 始终使用 DaemonSet，每个 Pod 通过 Downward API 获取所在节点名，并通过 Pod/Service
-label selector 只发现本节点的采集端点。`config.sources` 选择开启哪些预设采集器，
-预设名与 rule 名一致，见 [`values.yaml`](deploy/accelerator-exporter/values.yaml)。
+label selector 只发现本节点的采集端点。
 
-内置 `nvidia-dcgm` 数据源默认在 `rune-system` 和 `gpu-operator` 两个命名空间中
-发现 DCGM Service，兼容独立部署和由 NVIDIA Support 管理的 GPU Operator。
-如果安装在其它命名空间，可以覆盖
-`config.sourceDefinitions.nvidia-dcgm.serviceMonitor.namespaceSelector.matchNames`；
-该列表会整体替换默认值，仍只采集当前节点的 Ready Endpoint。
+**全部受支持的指标源默认已开启，不需要选择。** 组件没装的源发现不到端点，等于没配，不会
+产生任何副作用。默认发现位置见 [`values.yaml`](deploy/accelerator-exporter/values.yaml)：
+
+- `nvidia-dcgm-exporter`：`rune-system` 与 `gpu-operator` 中 `app: nvidia-dcgm-exporter`
+  的 Service，兼容独立部署和由 NVIDIA Support 管理的 GPU Operator
+- `volcano-vgpu-device-plugin`：`kube-system` 中 `app.kubernetes.io/name: volcano-device-plugin`
+  且 `app.kubernetes.io/component: volcano-vgpu-device-plugin` 的 Pod
+- `npu-exporter`：`npu-exporter` 命名空间中 `app: npu-exporter` 的 Service
+
+组件装在别处时用 `config.sources` 整体覆盖（数组，顺序即优先级）。该字段默认隐藏：不需要
+配置，只在非标准安装时才用。
 
 ```bash
 helm upgrade --install accelerator-exporter \
@@ -203,7 +222,7 @@ Chart 包含：
 - DaemonSet、ConfigMap 和 metrics Service
 - 主进程内的 CPU 型号识别和当前 Node 元数据上报，无需 NFD
 - 只读挂载 kubelet 的 pod-resources 目录，用于生成 `accelerator_pod_info`
-  （`podResources.hostPath` 留空则不挂载，此时只产出设备层指标）
+  （`podResources.hostPath` 留空则不挂载，此时没有关系层，`volcano-vgpu` 也会失去切片编号）
 - 指标动态发现、Pod 元数据和 Node `get/patch` 所需的 ServiceAccount、ClusterRole 和 ClusterRoleBinding
 - 可选的 Prometheus Operator ServiceMonitor
 - `values.schema.json`，用于 Helm 校验和配置页面 Schema 渲染

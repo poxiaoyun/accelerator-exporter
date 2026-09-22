@@ -81,8 +81,8 @@ func TestDeviceLayerNeverCarriesOwnershipOrVendorLabels(t *testing.T) {
 func TestApplyReportsCanonicalPassthroughWithResolvedIdentity(t *testing.T) {
 	t.Parallel()
 	source := Source{Name: "custom", Rule: RuleNvidiaDCGM}
-	samples := convert(t, ruleFor(t, RuleNvidiaDCGM).Apply(source,
-		Families{"accelerator_io_utilization_percentage": {{Labels: dcgmLabels(), Value: 12}}}, nil))
+	samples := convert(t, ruleFor(t, RuleNvidiaDCGM).Apply(Environment{Source: source},
+		Families{"accelerator_io_utilization_percentage": {{Labels: dcgmLabels(), Value: 12}}}))
 
 	sample := findSample(t, samples, "accelerator_io_utilization_percentage")
 	if sample.Value != 12 || sample.Labels[LabelDeviceID] != "GPU-1" || sample.Labels[LabelDeviceType] != DeviceTypeGPU {
@@ -98,8 +98,8 @@ func TestApplyReportsCanonicalPassthroughWithResolvedIdentity(t *testing.T) {
 
 func TestApplyReportsUnidentifiedMeasurements(t *testing.T) {
 	t.Parallel()
-	result := ruleFor(t, RuleNvidiaDCGM).Apply(Source{Name: "dcgm", Rule: RuleNvidiaDCGM},
-		Families{"DCGM_FI_DEV_GPU_UTIL": {{Labels: map[string]string{"Hostname": "node-a"}, Value: 42}}}, nil)
+	result := ruleFor(t, RuleNvidiaDCGM).Apply(Environment{Source: Source{Name: "dcgm", Rule: RuleNvidiaDCGM}},
+		Families{"DCGM_FI_DEV_GPU_UTIL": {{Labels: map[string]string{"Hostname": "node-a"}, Value: 42}}})
 	if len(result.Samples) == 0 {
 		t.Fatal("a measurement without a device_id must still be reported")
 	}

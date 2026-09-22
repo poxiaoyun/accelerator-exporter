@@ -4,6 +4,15 @@
 
 ### Breaking
 
+- `config.sources` is no longer a list of preset names. It is now the list of
+  source definitions itself, each with `name`, `rule` and exactly one of
+  `podMonitor` and `serviceMonitor`, and `config.sourceDefinitions` is gone.
+  Existing releases that only listed presets — `sources: [nvidia-dcgm]` — must be
+  replaced, otherwise the chart fails schema validation.
+- `config.customSources` is gone. A non-standard installation is now expressed by
+  overriding the entry in `config.sources`; `config.sources` itself is hidden and
+  every supported source is enabled by default, so a deployment that installs
+  nothing unusual still needs no configuration at all.
 - `config.sources` no longer accepts the `ascend-vnpu` preset. The `ascend-npu`
   preset now covers the whole npu-exporter endpoint, which exposes both the
   physical NPU and the vNPU families, so the second preset only re-scraped the
@@ -24,12 +33,29 @@
   `accelerator_batch_size_count`, `accelerator_latency_seconds` and
   `accelerator_queue_depth_count`.
 
+### Changed
+
+- The order of `config.sources` is now the precedence between sources. When two of
+  them cover the same metric on the same observation target, the source listed
+  first wins and the other reading is counted in
+  `accelerator_exporter_duplicate_samples_total`. Discovery used to order targets
+  by name, so which reading survived depended on what the sources happened to be
+  called. Put the more authoritative source earlier; the chart already lists
+  `nvidia-dcgm` before `volcano-vgpu`.
+
 ### Added
 
+- `volcano-vgpu` also reports the physical cards its slices run on, through
+  `HostCoreUtilization` and `HostGPUMemoryUsage`. On a node that runs no DCGM
+  this is the only source of the whole-card readings a consumer reaches through
+  `parent_device_id`. It carries no whole-card memory total, because the monitor
+  does not report one.
 - `podResources.hostPath` mounts kubelet's pod-resources directory read-only so
   the exporter can produce `accelerator_pod_info`. Set it to `""` on a cluster
-  that does not expose the socket; the device layer is still produced and
-  `accelerator_exporter_allocation_source_configured` reports 0.
+  that does not expose the socket; `accelerator_exporter_allocation_source_configured`
+  then reports 0, and every source whose identity comes from the samples is still
+  produced. The exception is `volcano-vgpu`, whose slice identifier exists only in
+  the allocation fact.
 - NVIDIA DCGM is discovered in both `rune-system` and `gpu-operator`, including GPU
   Operator installations managed by NVIDIA Support (the fix released as chart 1.0.3).
 ## [1.0.3] - 2026-09-21

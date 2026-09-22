@@ -236,7 +236,16 @@ func (e *Exporter) Refresh(ctx context.Context) error {
 		}
 		target.up = true
 		successfulTargets++
-		applied := rule.Apply(result.source, result.families, inventory)
+		applied := rule.Apply(accelerator.Environment{
+			Source: result.source,
+			// The allocation facts go in because a slice of a software-partitioned
+			// device is not named by any sample label. A failed read leaves this
+			// empty on purpose: such a source then resolves no slice identity
+			// instead of guessing one, and the samples it does produce are
+			// reported as an identity gap.
+			Inventory:   inventory,
+			Allocations: allocations,
+		}, result.families)
 		targets[result.source.Name] = target
 		converted = append(converted, applied.Samples...)
 		allocationIndexes = append(allocationIndexes, applied.AllocationIndex)

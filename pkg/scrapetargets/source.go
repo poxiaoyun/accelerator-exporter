@@ -205,11 +205,16 @@ type resolved struct {
 	port         string
 	path         string
 	scheme       string
+	// order is the position of the source in the configuration. It is the
+	// precedence between sources: when two of them report the same metric for
+	// the same observation target, the one configured first wins downstream, so
+	// the providers must keep it rather than sort the result by name.
+	order int
 }
 
 // resolve applies the monitor's defaults and carries the source identity into the
 // provider, so the provider never looks at a raw configuration value.
-func (source Source) resolve(spec MonitorSpec) resolved {
+func (source Source) resolve(spec MonitorSpec, order int) resolved {
 	path := strings.TrimSpace(spec.Path)
 	if path == "" {
 		path = "/metrics"
@@ -228,6 +233,7 @@ func (source Source) resolve(spec MonitorSpec) resolved {
 		port:         strings.TrimSpace(string(spec.Port)),
 		path:         path,
 		scheme:       scheme,
+		order:        order,
 	}
 }
 
@@ -241,17 +247,19 @@ func (monitor resolved) queryNamespaces() []string {
 }
 
 // normalizeSources validates every source and splits the ones a provider handles.
+// The configuration order is carried into each resolved monitor, because it is
+// the precedence between sources that report the same observation target.
 func normalizeSources(sources []Source, wantPod bool) ([]resolved, error) {
 	var monitors []resolved
-	for _, source := range sources {
+	for order, source := range sources {
 		if err := source.Validate(); err != nil {
 			return nil, err
 		}
 		switch {
 		case wantPod && source.PodMonitor != nil:
-			monitors = append(monitors, source.resolve(*source.PodMonitor))
+			monitors = append(monitors, source.resolve(*source.PodMonitor, order))
 		case !wantPod && source.ServiceMonitor != nil:
-			monitors = append(monitors, source.resolve(*source.ServiceMonitor))
+			monitors = append(monitors, source.resolve(*source.ServiceMonitor, order))
 		}
 	}
 	return monitors, nil

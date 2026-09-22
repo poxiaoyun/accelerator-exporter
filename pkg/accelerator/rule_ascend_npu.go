@@ -66,7 +66,7 @@ var ascendNPURule = Rule{
 				// than derived from a prefix.
 				Names:    []string{"huawei.com/Ascend910", "huawei.com/Ascend910B"},
 				Mode:     DeviceModePhysical,
-				DeviceID: func(raw map[string]string) string { return first(raw, "id", "device") },
+				DeviceID: func(_ Environment, raw map[string]string) string { return first(raw, "id", "device") },
 			}},
 		},
 		{
@@ -95,10 +95,10 @@ var ascendNPURule = Rule{
 // device_id. This mapping therefore prefers vdie_id and only falls back to the
 // index when nothing else is present, in which case contract validation reports
 // the target as having a decimal device_id instead of hiding it.
-func identifyAscendNPU(raw map[string]string, source Source, _ Inventory) Identity {
+func identifyAscendNPU(env Environment, raw map[string]string) Identity {
 	return Identity{
-		Node:       firstNonEmpty(first(raw, "node", "Hostname", "hostname"), source.Labels[LabelNode]),
-		Model:      firstNonEmpty(first(raw, "model", "modelName", "model_name"), source.Labels[LabelModel]),
+		Node:       firstNonEmpty(first(raw, "node", "Hostname", "hostname"), env.Source.Labels[LabelNode]),
+		Model:      firstNonEmpty(first(raw, "model", "modelName", "model_name"), env.Source.Labels[LabelModel]),
 		DeviceType: DeviceTypeNPU,
 		DeviceMode: DeviceModePhysical,
 		Vendor:     VendorHuawei,
@@ -113,10 +113,10 @@ func identifyAscendNPU(raw map[string]string, source Source, _ Inventory) Identi
 // parent_device_id stays empty and contract validation reports
 // missing_parent_device_id for every vNPU target. Filling it needs an
 // allocation source the exporter does not read yet.
-func identifyAscendVNPU(raw map[string]string, source Source, _ Inventory) Identity {
+func identifyAscendVNPU(env Environment, raw map[string]string) Identity {
 	return Identity{
-		Node:       firstNonEmpty(first(raw, "node", "Hostname", "hostname"), source.Labels[LabelNode]),
-		Model:      firstNonEmpty(first(raw, "model", "modelName", "model_name"), source.Labels[LabelModel]),
+		Node:       firstNonEmpty(first(raw, "node", "Hostname", "hostname"), env.Source.Labels[LabelNode]),
+		Model:      firstNonEmpty(first(raw, "model", "modelName", "model_name"), env.Source.Labels[LabelModel]),
 		DeviceType: DeviceTypeNPU,
 		DeviceMode: DeviceModeVirtual,
 		Vendor:     VendorHuawei,

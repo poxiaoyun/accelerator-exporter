@@ -12,4 +12,4 @@ data:
     scrapeTimeout: {{ .Values.config.scrapeTimeout | quote }}
     maxConcurrency: {{ .Values.config.maxConcurrency }}
     sources:
-      {{- include "accelerator-exporter.sources" . | nindent 6 }}
+      {{- toYaml .Values.config.sources | nindent 6 }}

@@ -22,6 +22,24 @@ type InventoryInput struct {
 	Families Families
 }
 
+// Environment is everything a Rule may look at for one scrape besides the
+// samples themselves.
+//
+// It is one value rather than a growing parameter list because the inputs a
+// rule needs do not all come from sample labels: the vGPU slice identifier is
+// only in the device allocation fact. Every rule receives the same value, so a
+// future allocation source (a vNPU parent, a MIG device identifier) needs no
+// signature change.
+type Environment struct {
+	// Source is the configured scrape source the samples came from.
+	Source Source
+	// Inventory is the physical device metadata the round revealed, used to
+	// complete instance samples whose own metric family omits node and model.
+	Inventory Inventory
+	// Allocations are the device allocation facts of the node this round.
+	Allocations []Allocation
+}
+
 // Metric maps one native metric onto one contract metric.
 type Metric struct {
 	// Source is the native metric name. Exactly one of Source and Sum is set.
@@ -73,9 +91,10 @@ type Deriver func(raw Families, converted []Sample, identities map[string]Identi
 // so its Rule has two Targets and the same endpoint is scraped once.
 type Target struct {
 	// Identify resolves the observation target identity from one native sample.
-	// An identity without a node, a device_id or a device_type is dropped by
-	// Apply.
-	Identify func(raw map[string]string, source Source, inventory Inventory) Identity
+	// It may return an incomplete identity: Apply keeps the measurement and
+	// leaves the unresolved labels out, and contract validation reports the gap
+	// as a violation rather than dropping the sample.
+	Identify func(env Environment, raw map[string]string) Identity
 	// Metrics are the native metric mappings of this target class.
 	Metrics []Metric
 	// Derive appends samples that cannot be expressed as a one-to-one mapping,
@@ -149,13 +168,13 @@ type Result struct {
 // identity is not a reason to drop a measurement: the labels that could not be
 // resolved are omitted, contract validation reports the gap, and the sample
 // still contributes to whatever aggregation it can support.
-func (rule Rule) Apply(source Source, families Families, inventory Inventory) Result {
+func (rule Rule) Apply(env Environment, families Families) Result {
 	result := Result{
 		Identities:      map[string]Identity{},
 		AllocationIndex: map[string]Identity{},
 	}
 	for _, target := range rule.Targets {
-		converted, identities := applyTarget(target, source, families, inventory, result.AllocationIndex)
+		converted, identities := applyTarget(target, env, families, result.AllocationIndex)
 		result.Samples = append(result.Samples, converted...)
 		for key, identity := range identities {
 			result.Identities[key] = mergeIdentity(result.Identities[key], identity)
@@ -170,7 +189,7 @@ func (rule Rule) Apply(source Source, families Families, inventory Inventory) Re
 }
 
 func applyTarget(
-	target Target, source Source, families Families, inventory Inventory, allocationIndex map[string]Identity,
+	target Target, env Environment, families Families, allocationIndex map[string]Identity,
 ) ([]Sample, map[string]Identity) {
 	var samples []Sample
 	identities := map[string]Identity{}
@@ -182,7 +201,7 @@ func applyTarget(
 			if native.Mode != identity.DeviceMode {
 				continue
 			}
-			nativeDeviceID := native.DeviceID(raw)
+			nativeDeviceID := native.DeviceID(env, raw)
 			if nativeDeviceID == "" {
 				continue
 			}
@@ -210,7 +229,7 @@ func applyTarget(
 		}
 		metadata, _ := CanonicalMetric(name)
 		for _, raw := range families[name] {
-			identity := resolveIdentity(target, raw, source, inventory)
+			identity := resolveIdentity(target, raw, env)
 			if !appliesTo(metadata, identity.DeviceMode) {
 				continue
 			}
@@ -226,7 +245,7 @@ func applyTarget(
 	for _, mapping := range target.Metrics {
 		metadata, _ := CanonicalMetric(mapping.Canonical)
 		for _, raw := range families[mapping.Source] {
-			identity := resolveIdentity(target, raw, source, inventory)
+			identity := resolveIdentity(target, raw, env)
 			// The target is recorded before the mapping decides whether this
 			// particular row is a measurement it can express. A device that is
 			// observed at all belongs in the inventory, and a source that only
@@ -261,7 +280,7 @@ func applyTarget(
 		if len(mapping.Sum) == 0 {
 			continue
 		}
-		converted, ok := sumMapping(target, mapping, source, families, inventory, record)
+		converted, ok := sumMapping(target, mapping, env, families, record)
 		if ok {
 			samples = append(samples, converted...)
 		}
@@ -280,7 +299,7 @@ func applyTarget(
 // sum is a different number and silently exposing it would understate the
 // reading. The caller then leaves the metric to derivation.
 func sumMapping(
-	target Target, mapping Metric, source Source, families Families, inventory Inventory,
+	target Target, mapping Metric, env Environment, families Families,
 	record func(Identity, map[string]string),
 ) ([]Sample, bool) {
 	metadata, _ := CanonicalMetric(mapping.Canonical)
@@ -292,7 +311,7 @@ func sumMapping(
 			return nil, false
 		}
 		for _, raw := range family {
-			identity := resolveIdentity(target, raw, source, inventory)
+			identity := resolveIdentity(target, raw, env)
 			record(identity, raw.Labels)
 			key := identity.Key()
 			totals[key] += raw.Value
@@ -338,8 +357,8 @@ func appliesTo(metadata MetricMetadata, deviceMode string) bool {
 // It never fails. A source that cannot name its observation target still has a
 // measurement worth reporting, so the unresolved labels are left out and
 // contract validation reports the gap against the contract instead.
-func resolveIdentity(target Target, raw RawSample, source Source, inventory Inventory) Identity {
-	return target.Identify(raw.Labels, source, inventory).normalize()
+func resolveIdentity(target Target, raw RawSample, env Environment) Identity {
+	return target.Identify(env, raw.Labels).normalize()
 }
 
 // contractValue applies the value the contract fixes for a metric, overriding

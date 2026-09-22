@@ -43,8 +43,8 @@ func TestAscendHealthStateFromTheNativeConvention(t *testing.T) {
 	t.Parallel()
 	// The exporter's documented convention is 1 = healthy, so a zero reading is
 	// the failing one.
-	healthy := ruleFor(t, RuleAscendNPU).Apply(Source{Name: "npu", Rule: RuleAscendNPU, Labels: map[string]string{"node": "node-npu"}},
-		Families{"npu_chip_info_health_status": {{Labels: npuLabels(), Value: 1}}}, nil)
+	healthy := ruleFor(t, RuleAscendNPU).Apply(Environment{Source: Source{Name: "npu", Rule: RuleAscendNPU, Labels: map[string]string{"node": "node-npu"}}},
+		Families{"npu_chip_info_health_status": {{Labels: npuLabels(), Value: 1}}})
 	if state := findSample(t, healthy.Samples, "accelerator_health_state"); state.Labels["state"] != HealthStateHealthy {
 		t.Fatalf("state = %#v, want healthy", state)
 	}
@@ -52,8 +52,8 @@ func TestAscendHealthStateFromTheNativeConvention(t *testing.T) {
 		t.Fatalf("a healthy device produces no diagnostic, got %#v", samples)
 	}
 
-	failing := ruleFor(t, RuleAscendNPU).Apply(Source{Name: "npu", Rule: RuleAscendNPU, Labels: map[string]string{"node": "node-npu"}},
-		Families{"npu_chip_info_health_status": {{Labels: npuLabels(), Value: 0}}}, nil)
+	failing := ruleFor(t, RuleAscendNPU).Apply(Environment{Source: Source{Name: "npu", Rule: RuleAscendNPU, Labels: map[string]string{"node": "node-npu"}}},
+		Families{"npu_chip_info_health_status": {{Labels: npuLabels(), Value: 0}}})
 	state := findSample(t, failing.Samples, "accelerator_health_state")
 	if state.Labels["state"] != HealthStateFault {
 		t.Fatalf("state = %#v, want fault", state)

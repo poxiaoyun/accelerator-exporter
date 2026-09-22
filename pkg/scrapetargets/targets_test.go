@@ -150,12 +150,78 @@ func TestCompositeKeepsSuccessfulTargetsOnDiscoveryError(t *testing.T) {
 	t.Parallel()
 	target := accelerator.Source{Name: "discovered", Address: "http://host/metrics", Rule: accelerator.RuleAscendNPU}
 	provider := Composite(
+		[]Source{{Name: "discovered"}},
 		providerFunc(func(context.Context) ([]accelerator.Source, error) { return []accelerator.Source{target}, nil }),
 		providerFunc(func(context.Context) ([]accelerator.Source, error) { return nil, errors.New("discovery failed") }),
 	)
 	targets, err := provider.Targets(context.Background())
 	if err == nil || len(targets) != 1 || targets[0].Name != "discovered" {
 		t.Fatalf("targets = %#v, error = %v", targets, err)
+	}
+}
+
+// TestCompositeOrdersByConfigurationNotByName: the configured order is the
+// precedence between sources that report the same observation target, so it has
+// to survive the merge. The names here sort the other way round on purpose.
+func TestCompositeOrdersByConfigurationNotByName(t *testing.T) {
+	t.Parallel()
+	provider := Composite(
+		[]Source{{Name: "z-authoritative"}, {Name: "a-fallback"}},
+		providerFunc(func(context.Context) ([]accelerator.Source, error) {
+			return []accelerator.Source{{Name: "a-fallback/ns/pod", Address: "http://a/metrics", Rule: accelerator.RuleVolcanoVGPU}}, nil
+		}),
+		providerFunc(func(context.Context) ([]accelerator.Source, error) {
+			return []accelerator.Source{{Name: "z-authoritative/ns/svc", Address: "http://z/metrics", Rule: accelerator.RuleNvidiaDCGM}}, nil
+		}),
+	)
+	targets, err := provider.Targets(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 || targets[0].Name != "z-authoritative/ns/svc" || targets[1].Name != "a-fallback/ns/pod" {
+		t.Fatalf("the configured order must decide, not the names: %#v", targets)
+	}
+}
+
+// TestPodProviderGroupsSourcesInConfigurationOrder is the same guarantee one
+// level down: two pod-based sources are reported as two blocks in the order they
+// were configured, whatever the matching Pods are called.
+func TestPodProviderGroupsSourcesInConfigurationOrder(t *testing.T) {
+	t.Parallel()
+	ready := func(name, app string) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "gpu", Labels: map[string]string{"app": app}},
+			Spec: corev1.PodSpec{
+				NodeName:   "node-a",
+				Containers: []corev1.Container{{Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400}}}},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning, PodIP: "10.0.0.1"},
+		}
+	}
+	lister := &fakePodLister{
+		pods:  map[string][]corev1.Pod{"gpu": {ready("z-pod", "z"), ready("a-pod", "a")}},
+		error: map[string]error{},
+	}
+	podMonitor := func(app string) *MonitorSpec {
+		return &MonitorSpec{
+			Namespaces: []string{"gpu"},
+			Selector:   LabelSelector{MatchLabels: map[string]string{"app": app}},
+			Port:       "metrics",
+		}
+	}
+	provider, err := NewPodProvider(lister, "node-a", []Source{
+		{Name: "z-source", Rule: accelerator.RuleNvidiaDCGM, PodMonitor: podMonitor("z")},
+		{Name: "a-source", Rule: accelerator.RuleVolcanoVGPU, PodMonitor: podMonitor("a")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets, err := provider.Targets(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 || targets[0].Name != "z-source/gpu/z-pod" || targets[1].Name != "a-source/gpu/a-pod" {
+		t.Fatalf("targets = %#v, want the configured source order", targets)
 	}
 }
 

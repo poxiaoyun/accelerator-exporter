@@ -31,9 +31,24 @@ type Provider interface {
 	Targets(context.Context) ([]accelerator.Source, error)
 }
 
-// Composite combines multiple providers. Targets returned alongside an error
-// remain usable when one Kubernetes discovery provider temporarily fails.
-func Composite(providers ...Provider) Provider {
+// Composite combines multiple providers into the target list of one node.
+// Targets returned alongside an error remain usable when one Kubernetes
+// discovery provider temporarily fails.
+//
+// The merged list follows the order the sources are configured in, not the
+// alphabetical order of their names. That order is the precedence between
+// sources that report the same metric for the same observation target: the
+// consumer keeps the first series it sees and counts the rest as duplicates, so
+// the source configured first is the one whose reading survives. A target whose
+// source is not in the list is placed last; two such targets fall back to their
+// names, which keeps the order stable between rounds.
+func Composite(sources []Source, providers ...Provider) Provider {
+	order := make(map[string]int, len(sources))
+	for index, source := range sources {
+		if _, exists := order[source.Name]; !exists {
+			order[source.Name] = index
+		}
+	}
 	return providerFunc(func(ctx context.Context) ([]accelerator.Source, error) {
 		var targets []accelerator.Source
 		var providerErrors []error
@@ -47,9 +62,26 @@ func Composite(providers ...Provider) Provider {
 				providerErrors = append(providerErrors, err)
 			}
 		}
-		sort.Slice(targets, func(i, j int) bool { return targets[i].Name < targets[j].Name })
+		sort.SliceStable(targets, func(i, j int) bool {
+			left, right := sourceOrder(order, targets[i].Name), sourceOrder(order, targets[j].Name)
+			if left != right {
+				return left < right
+			}
+			return targets[i].Name < targets[j].Name
+		})
 		return targets, errors.Join(providerErrors...)
 	})
+}
+
+// sourceOrder is where the source of one target sits in the configuration. A
+// target is named <source name>/<where it was found>, so the source name is its
+// first segment.
+func sourceOrder(order map[string]int, targetName string) int {
+	name, _, _ := strings.Cut(targetName, "/")
+	if position, ok := order[name]; ok {
+		return position
+	}
+	return len(order)
 }
 
 type providerFunc func(context.Context) ([]accelerator.Source, error)
@@ -126,6 +158,11 @@ func NewPodProvider(lister PodLister, nodeName string, sources []Source) (*PodPr
 }
 
 // Targets resolves matching running Pods to direct Pod-IP metrics URLs.
+//
+// The result groups each source's targets together and keeps the sources in the
+// order they are configured, because that order is the precedence between
+// sources. The order within one source is whatever the API returned; nothing
+// depends on it, and Composite imposes the final order anyway.
 func (provider *PodProvider) Targets(ctx context.Context) ([]accelerator.Source, error) {
 	var targets []accelerator.Source
 	var discoveryErrors []error
@@ -168,7 +205,6 @@ func (provider *PodProvider) Targets(ctx context.Context) ([]accelerator.Source,
 			}
 		}
 	}
-	sort.Slice(targets, func(i, j int) bool { return targets[i].Name < targets[j].Name })
 	return targets, errors.Join(discoveryErrors...)
 }
 
@@ -197,8 +233,12 @@ func NewServiceProvider(lister ServiceEndpointLister, nodeName string, sources [
 }
 
 // Targets resolves selected Services to ready EndpointSlice addresses.
+//
+// Like the Pod provider, it groups each source's targets together and keeps the
+// sources in the order they are configured.
 func (provider *ServiceProvider) Targets(ctx context.Context) ([]accelerator.Source, error) {
-	targetsByName := map[string]accelerator.Source{}
+	seen := map[string]struct{}{}
+	var targets []accelerator.Source
 	var discoveryErrors []error
 	for _, monitor := range provider.monitors {
 		selector, err := metav1.LabelSelectorAsSelector(&monitor.selector)
@@ -251,21 +291,22 @@ func (provider *ServiceProvider) Targets(ctx context.Context) ([]accelerator.Sou
 							host := net.JoinHostPort(address, strconv.Itoa(int(endpointPort)))
 							metricsURL := url.URL{Scheme: monitor.scheme, Host: host, Path: monitor.path}
 							name := monitor.name + "/" + service.Namespace + "/" + service.Name + "/" + host
-							targetsByName[name] = accelerator.Source{
+							// One endpoint can be reached through more than one
+							// Service, so an address is reported once.
+							if _, exists := seen[name]; exists {
+								continue
+							}
+							seen[name] = struct{}{}
+							targets = append(targets, accelerator.Source{
 								Name: name, Address: metricsURL.String(), Rule: monitor.rule,
 								Labels: sourceLabels(monitor, provider.nodeName),
-							}
+							})
 						}
 					}
 				}
 			}
 		}
 	}
-	targets := make([]accelerator.Source, 0, len(targetsByName))
-	for _, target := range targetsByName {
-		targets = append(targets, target)
-	}
-	sort.Slice(targets, func(i, j int) bool { return targets[i].Name < targets[j].Name })
 	return targets, errors.Join(discoveryErrors...)
 }
 

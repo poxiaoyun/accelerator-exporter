@@ -82,7 +82,7 @@ func Run(ctx context.Context, options *Options) error {
 	metricExporter, err := New(
 		options,
 		NewHTTPScraper(&http.Client{Timeout: options.ScrapeTimeout}),
-		scrapetargets.Composite(podProvider, serviceProvider),
+		scrapetargets.Composite(options.Sources, podProvider, serviceProvider),
 		allocations,
 		logger,
 	)

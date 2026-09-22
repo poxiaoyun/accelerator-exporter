@@ -43,7 +43,11 @@
   什么都给不出时不产出该目标。
 - `accelerator_info` 是观测目标清单的唯一来源，每目标一条、值恒 1。
 - 标签值一律小写；`device_type`、`device_mode`、`state`、`severity` 是闭集。
-- 同一指标名与同一观测目标只能由一条映射产生。
+- 同一指标名与同一观测目标的最终产出只有一条序列。
+- **跨源重叠按配置顺序裁决**：两个源都可能覆盖同一目标上的同一个指标时（例如整卡读数既来自
+  DCGM 也来自 vGPU monitor 自己的采样），配置在**前**的源优先，后续源的同目标同指标读数按重复
+  丢弃，计入 `accelerator_exporter_duplicate_samples_total`。所以发现阶段必须保留配置顺序，不能
+  按源名重排；`Composite` 在合并 pod 类与 service 类目标时按源在配置数组里的位置排序。
 - **身份不完整不丢样本**：缺的标签不出现，同时计入 `accelerator_exporter_contract_violations_total{reason}`。
   只有三类情况丢弃样本：指标名不在契约里、适用形态与该目标形态不符、`health_state` 的 `state`
   不在闭集内。所有丢弃与违约都按 reason 计数，不静默。
@@ -97,6 +101,17 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
   Ascend 是 1 表示健康，写反了不会报错。
 - 一个 Rule 可以有多个 `Target`（观测目标类别）。npu-exporter 一个端点暴露两族指标，所以
   `ascend-npu` 承载两个 Target，端点只抓一次；配成两条源会把同一端点抓两遍，重复样本被去重丢弃。
+- **身份来源不一定是样本标签**。多数资源的原生标识就在样本上（NVIDIA 的 `UUID`、Ascend 的
+  `vdie_id`），但 vGPU 的原生标识只在 kubelet 的分配事实里（第 9.1 节）。所以规则的身份构造
+  必须能同时看到本轮样本**和本轮分配事实**；把身份只建在样本标签上的规则，遇到这类资源会算出
+  不唯一的 `device_id`，而后果是静默去重、丢数据，不会报错。
+- **规则里的每个字段值都要有真实来源**。写规则时要拿真机的原始样本对齐（第 9.1 节的两个结论
+  都是这样得出来的），fixture 不得凭字段名推测 —— 手编过一个不存在的标签值，就等于把这条规则
+  最该被检验的地方盖住了。
+- **物理设备自身的事实不在实例上重复**。温度、功耗、功耗上限、降频原因、硬件错误累计由消费方
+  沿 `parent_device_id` 取父目标的同名序列；容量、使用量与利用率不属于此类（父目标的显存用量
+  含它的全部实例），实例必须自己产出。契约用「适用形态」把这条固化下来：标记为物理设备的指标
+  不会出现在实例上，所以规则里写了也不会产出（第 9.3 节）。
 
 ## 7. NVIDIA DCGM（`nvidia-dcgm`）
 
@@ -258,10 +273,44 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 
 采集源：Volcano vGPU monitor 的 `/metrics`，报告软件切分出的 GPU 切片。
 
-身份：`device_id` ← `vdeviceid`，`parent_device_id` ← `deviceuuid`（切出来的物理卡），
-`device_mode` 恒为 `virtual`，`device_type` = `gpu`，`vendor` = `nvidia`。该族**不含**
-`node`/`model`，因此从 `BuildInventory` 里按 `deviceuuid` 继承 DCGM 报过的整卡 `node`/`model`；
-也没有静态信息。
+### 9.1 切片身份来自分配事实，**不是** monitor 的标签
+
+**`vdeviceid` 不是切片的标识**，它只表示"这个容器里第几片"：容器只持有一片时，任何卡上的任何
+一片都是 `vdeviceid="0"`。实测同一张卡上三个 Pod（各持一片）的 monitor 指标，`vdeviceid` 全是 `0`。
+
+切片的唯一标识在 **kubelet 的分配事实**里：`volcano.sh/vgpu-number` 的 `DeviceID` 形如
+`<父卡UUID>-<槽号>`，槽号每卡唯一。同一次实测里三个 Pod 的槽号分别是 `1`、`6`、`2`。
+火山调度器写进 Pod 的注解 `volcano.sh/vgpu-ids-new` 只记父卡与显存/核数、**不含槽号**，
+所以槽号只有分配事实这一个来源。
+
+把 `vdeviceid` 当 `device_id` 的后果是**静默丢数据**：同一张卡上的多片会算出同一个
+`(node, device_id)`，被当成一个观测目标去重，只剩其中一片的值。
+
+vGPU 是本仓库唯一一个**原生标识不在样本标签里**的资源：NVIDIA 把 MIG 序号放在 `GPU_I_ID`、
+Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份；vGPU 必须回到分配事实取槽号。
+
+| 契约标签 | 取值 |
+| :--- | :--- |
+| `device_id` | `<父卡UUID>-<槽号>`，逐字取自分配事实 `volcano.sh/vgpu-number` 的 `DeviceID` |
+| `parent_device_id` | `<父卡UUID>`，来自 monitor 的 `deviceuuid` |
+| `device_mode` / `device_type` / `vendor` | 恒 `virtual` / `gpu` / `nvidia` |
+| `node` / `model` | 该族标签里没有，按 `deviceuuid` 从 `BuildInventory` 继承 DCGM 报过的整卡值 |
+| 静态信息 | 无来源，不产出 |
+
+`<父卡>-<槽号>` 是分配事实里逐字给出的标识，属于规范的「采集端能给出厂商实例标识时直接使用」，
+不是由序号拼出来的位置形式，所以两层能共用同一个取值。
+
+样本上的 Pod 标签只用来**挑**那条分配事实；落到序列上的 `device_id` 是从分配事实里读出来的，
+不是从样本里读出来的。归属的权威仍是分配事实（第 4 节），厂商的 workload 标签不是。
+
+取值只有这一条路：按 `(namespace, pod, container, 父卡)` 在本轮分配事实里找候选，**有且只有一个**
+候选时才采用它的 `DeviceID`。候选为零（分配源没读到这个 Pod 的事实）或候选多于一个（该容器在同
+一张卡上持有多片，而 monitor 的 `vdeviceid` 只是容器内序号，无法确定哪片对哪片）都不产出
+`device_id`，样本被契约校验记为身份缺口，而不是猜一个可能错的值。
+
+### 9.2 指标映射
+
+切片（`device_mode=virtual`）：
 
 | 原生指标 | 原生单位 | 契约指标 | 倍率 |
 | :--- | :--- | :--- | :--- |
@@ -269,11 +318,35 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 | `vGPU_device_memory_usage_in_bytes` | bytes | `accelerator_memory_used_bytes` | ×1 |
 | `vGPU_device_memory_limit_in_bytes` | bytes | `accelerator_memory_total_bytes`（**限额**） | ×1 |
 
-不映射：温度、功耗、降频原因、硬件错误 —— 契约把它们限制在 physical，而切片没有独立读数；
-`accelerator_overall_utilization_percentage` 也没有来源。
+整卡（`device_mode=physical`，`device_id` = `deviceuuid`）：
 
-关系层：切片按虚拟资源分配而不是按设备，`podresources` 里的资源名不是设备标识，因此没有声明
-`NativeResource`，见第 10 节。
+| 原生指标 | 原生单位 | 契约指标 | 倍率 |
+| :--- | :--- | :--- | :--- |
+| `HostCoreUtilization` | 0–100 | `accelerator_core_utilization_percentage` | ×1 |
+| `HostGPUMemoryUsage` | bytes | `accelerator_memory_used_bytes` | ×1 |
+
+整卡这一族带 `deviceidx`，那是位置，**不产出 `device_index`** —— 规范把该标签限定在 `partition`。
+
+### 9.3 不映射的与关系层
+
+不映射：温度、功耗、降频原因、硬件错误 —— 契约把它们限制在 physical，而这个 monitor 对整卡也只
+有上面那两条读数，切片更没有。这些读数本来就是父卡自身的事实，消费方沿 `parent_device_id` 取整卡
+的同名序列即可，规范不要求实例重复产出。`accelerator_overall_utilization_percentage` 没有来源。
+
+但**显存与利用率不能照这个办法省**：整卡的 `used` 含它的全部切片，整卡利用率是整卡口径，而切片
+有自己的限额与用量，必须自己产出。切片出口的三个指标全是这一类。
+
+整卡那一族是**同一张卡的第二个来源**：DCGM 从驱动读，它从自己的采样器读。两个源同时配时，
+`accelerator_core_utilization_percentage`、`accelerator_memory_used_bytes` 以及 `accelerator_info`
+都会在同一个 `(node, <父卡UUID>)` 上撞在一起，按配置顺序裁决（第 3 节）。这也正是**保留整卡这一族**
+的理由：只有 vGPU monitor、没有 DCGM 的节点上，父卡读数只剩这一个来源，消费方沿 `parent_device_id`
+才查得到东西。
+
+`HostGPUMemoryUsage` 与 DCGM 的 `FB_USED` 是否同一口径尚未真机对齐（第 10 节的假设）。
+
+关系层：切片声明 `volcano.sh/vgpu-number`，整卡声明 `nvidia.com/gpu`，`device_id` 分别与设备层共用
+`<父卡>-<槽号>` 和 `<父卡UUID>`，两层才 join 得上。`volcano.sh/vgpu-memory` 的 `DeviceID` 形如
+`<父卡>-memory-<n>`，看着像槽号但它是显存块的分配，不能当切片标识，所以不声明。
 
 ## 10. 身份前提与已知缺口
 
@@ -288,9 +361,19 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 | Ascend 的健康值 1 = 健康 | 若相反，健康与故障会互换且不会报错 |
 | Ascend 设备插件注册的资源名叫 `huawei.com/Ascend910` / `Ascend910B` | 关系层解析不到，不产出序列 |
 | DCGM 每行都带 `UUID` | 退到 `device` 序号，被报成 `decimal_device_id` |
+| vGPU monitor 的 `HostGPUMemoryUsage` 与 DCGM 的 `FB_USED` 同口径 | 两个源同时配、又按配置顺序让 vGPU monitor 先手时，整卡显存用量会换一个口径；`FB_USED` 明确不含驱动保留区，`HostGPUMemoryUsage` 的 help 只写了 "GPU device memory usage" |
 
-两处缺口是**结构性**的，不是假设问题：
+结构性缺口（不是假设问题）：
 
+- **vGPU 的身份完全依赖分配源**：切片的槽号只在 `volcano.sh/vgpu-number` 的分配事实里，设备层与
+  关系层都从那里取。分配源不可用或 Pod 已删除时，切片样本没有 `device_id`，只以身份缺口上报 ——
+  这是有意的：猜一个槽号会把一块切片的读数记到另一块上（第 9.1 节）。
+- **vGPU 多片配对未验证**：一个容器在同一张卡上持有多片时，`vdeviceid` 只是容器内序号，无法确定
+  哪片对哪片，因此暂不产出 `device_id`，而不是按顺序硬配。要落实得在真机上跑一个多片容器，看
+  `vdeviceid` 是否确实按容器内分配顺序排列（已实测的场景是"每容器一片"）。
+- **整卡只给出利用率与用量，没有容量**：vGPU monitor 不报整卡显存总量，所以在没有 DCGM 的节点上，
+  整卡只会有 `accelerator_memory_used_bytes`，没有 `total`、`free` 与容量利用率（派生出不来，
+  也不该编）。这是可接受的缺口，不是错误。
 - **vNPU 没有父级来源**：`vnpu_pod_*` 只有 `v_dev_id`，没有它被切出来的物理 NPU 标识，
   `parent_device_id` 为空。补它需要一个本仓库尚未读取的分配源。
 - **MIG 与 vNPU 的分配标识未知**：设备插件按什么标识分配它们、对应哪个扩展资源名都不清楚。

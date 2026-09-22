@@ -38,8 +38,10 @@ type NativeResource struct {
 	// DeviceID reads the identifier the device plugin reports for the
 	// observation target of one native sample. It must agree with the
 	// identifiers that appear in the allocation facts, otherwise the relation
-	// layer resolves nothing and reports nothing.
-	DeviceID func(raw map[string]string) string
+	// layer resolves nothing and reports nothing. It takes the whole
+	// Environment because the identifier is not always a sample label: for a
+	// vGPU slice the allocation fact is the only source of it.
+	DeviceID func(env Environment, raw map[string]string) string
 }
 
 // allocationKey is the lookup key of the allocation index.
@@ -61,6 +63,15 @@ func BuildPodInfo(allocations []Allocation, indexes ...map[string]Identity) []Sa
 	resolved := map[string]Identity{}
 	for _, index := range indexes {
 		for key, identity := range index {
+			// First wins, as everywhere else an allocation or a series can be
+			// reached through more than one source: the provider order is the
+			// configured order of the sources, so letting a later source
+			// overwrite would make the outcome depend on which sources happen to
+			// be enabled. Today every declaration of one resource resolves to the
+			// same node and device_id, so this only removes the surprise.
+			if _, exists := resolved[key]; exists {
+				continue
+			}
 			resolved[key] = identity
 		}
 	}

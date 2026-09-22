@@ -8,10 +8,11 @@ import "testing"
 // leak is caught here rather than in production.
 
 type fixture struct {
-	name      string
-	source    Source
-	families  Families
-	inventory Inventory
+	name        string
+	source      Source
+	families    Families
+	inventory   Inventory
+	allocations []Allocation
 }
 
 var fixtures = []fixture{
@@ -78,13 +79,18 @@ var fixtures = []fixture{
 		},
 	},
 	{
-		name:      "volcano-vgpu",
-		source:    Source{Name: "volcano-vgpu-device-plugin/node-gpu", Rule: RuleVolcanoVGPU},
-		inventory: Inventory{"GPU-2": {Node: "node-gpu", Model: "L40"}},
+		name:        "volcano-vgpu",
+		source:      Source{Name: "volcano-vgpu-device-plugin/ubuntu", Rule: RuleVolcanoVGPU},
+		inventory:   Inventory{vgpuParentUUID: {Node: "ubuntu", Model: "NVIDIA GeForce RTX 3080"}},
+		allocations: vgpuAllocations(),
 		families: Families{
-			"Device_utilization_desc_of_container": {{Labels: vgpuLabels(), Value: 66}},
-			"vGPU_device_memory_usage_in_bytes":    {{Labels: vgpuLabels(), Value: 4294967296}},
-			"vGPU_device_memory_limit_in_bytes":    {{Labels: vgpuLabels(), Value: 8589934592}},
+			"Device_utilization_desc_of_container": {{Labels: vgpuSliceLabels(), Value: 0}},
+			"vGPU_device_memory_usage_in_bytes":    {{Labels: vgpuSliceLabels(), Value: 4230087680}},
+			"vGPU_device_memory_limit_in_bytes":    {{Labels: vgpuSliceLabels(), Value: 4294967296}},
+			// The card, as the same endpoint reports it. No Pod labels, and a
+			// device index that must not become device_index.
+			"HostCoreUtilization": {{Labels: vgpuCardLabels(), Value: 0}},
+			"HostGPUMemoryUsage":  {{Labels: vgpuCardLabels(), Value: 5044830208}},
 		},
 	},
 	{
@@ -131,10 +137,57 @@ func vnpuLabels() map[string]string {
 	}
 }
 
-func vgpuLabels() map[string]string {
+// vgpuParentUUID is the card below. It and every value in this block are a real
+// capture from a single-node cluster (node "ubuntu", one RTX 3080 per
+// `nvidia-smi -L`) with three vGPU slices live on that one card.
+const vgpuParentUUID = "GPU-8eb35402-7611-4de7-519d-10320e5fe3a5"
+
+// vgpuSliceLabels is one real monitor sample, for the vLLM container holding a
+// single slice. Two things about it are the reason this rule is the hard one:
+// the family carries no model, and vdeviceid is the ordinal of the slice inside
+// its container, so it reads 0 here even though the slice is slot 1 of the card
+// and the other two containers holding a slice report 0 as well.
+func vgpuSliceLabels() map[string]string {
+	return vgpuSliceLabelsFor("demo", "test-zk-vllm-5cf7947486-pzk2l", "vllm")
+}
+
+// vgpuCardLabels builds the labels of one whole-card reading of the same
+// capture. These families name the card and its index and nothing else: no Pod,
+// no model, and no flag saying the index is a position.
+func vgpuCardLabels() map[string]string {
 	return map[string]string{
-		"deviceuuid": "GPU-2", "vdeviceid": "slice-1", "modelName": "L40",
-		"podnamespace": "train", "podname": "job-4", "ctrname": "main",
+		"deviceuuid": vgpuParentUUID, "deviceidx": "0", "zone": "vGPU",
+	}
+}
+
+// vgpuSliceLabelsFor builds the labels of one monitor sample of the capture
+// below for the container that holds the slice. Only the identity of the
+// container varies: deviceuuid names the card, vdeviceid the ordinal inside the
+// container, and both are the same for every slice in this capture.
+func vgpuSliceLabelsFor(namespace, pod, container string) map[string]string {
+	return map[string]string{
+		"deviceuuid": vgpuParentUUID, "vdeviceid": "0", "zone": "vGPU",
+		"podnamespace": namespace, "podname": pod, "ctrname": container,
+	}
+}
+
+// vgpuAllocations is the device allocation fact of the same round. The slots 1,
+// 2 and 6 exist nowhere but here: no sample label and not even the scheduler's
+// own pod annotation carries them.
+func vgpuAllocations() []Allocation {
+	return []Allocation{
+		{
+			Namespace: "demo", Pod: "test-zk-vllm-5cf7947486-pzk2l", PodUID: "uid-vllm", Container: "vllm",
+			NativeResource: volcanoVGPUResource, NativeDeviceID: vgpuParentUUID + "-1",
+		},
+		{
+			Namespace: "default", Pod: "ae-vgpu-1", PodUID: "uid-ae-1", Container: "holder",
+			NativeResource: volcanoVGPUResource, NativeDeviceID: vgpuParentUUID + "-6",
+		},
+		{
+			Namespace: "default", Pod: "ae-vgpu-2", PodUID: "uid-ae-2", Container: "holder",
+			NativeResource: volcanoVGPUResource, NativeDeviceID: vgpuParentUUID + "-2",
+		},
 	}
 }
 
@@ -146,7 +199,7 @@ func applyFixture(t *testing.T, f fixture) Result {
 		t.Fatalf("fixture %q names unknown rule %q", f.name, f.source.Rule)
 		return Result{}
 	}
-	return rule.Apply(f.source, f.families, f.inventory)
+	return rule.Apply(Environment{Source: f.source, Inventory: f.inventory, Allocations: f.allocations}, f.families)
 }
 
 func withLabel(labels map[string]string, name, value string) map[string]string {
