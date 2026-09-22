@@ -1,0 +1,20 @@
+suite: image reference
+templates:
+  - templates/daemonset.yaml
+  - templates/configmap.yaml
+tests:
+  - it: uses the configured repository as it is
+    template: templates/daemonset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter:main
+  - it: replaces the registry with global.imageRegistry when a platform sets one
+    template: templates/daemonset.yaml
+    set:
+      global.imageRegistry: registry.example.com/platform
+      image.tag: v1.0.4
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/platform/xiaoshiai/accelerator-exporter:v1.0.4

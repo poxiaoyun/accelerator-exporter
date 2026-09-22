@@ -38,6 +38,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "accelerator-exporter.image" -}}
-{{- $tag := default .Chart.AppVersion .Values.image.tag -}}
-{{- printf "%s:%s" .Values.image.repository $tag }}
+{{- $repository := .Values.image.repository -}}
+{{- $registry := index (.Values.global | default dict) "imageRegistry" | default "" -}}
+{{- if $registry -}}
+{{- $repository = printf "%s/%s" $registry (regexReplaceAll "^[^/]+/" $repository "") -}}
+{{- end -}}
+{{- printf "%s:%s" $repository (default .Chart.AppVersion .Values.image.tag) }}
 {{- end }}

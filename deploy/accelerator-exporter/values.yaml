@@ -6,6 +6,8 @@ updateStrategy:
     maxUnavailable: 1
 
 image:
+  # The registry part is replaced by global.imageRegistry when a platform sets it,
+  # so that installing from a mirror serves the same repository path.
   repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
   # Defaults to Chart.appVersion so a versioned package deploys its matching image.
   tag: ""

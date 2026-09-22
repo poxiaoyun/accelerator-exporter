@@ -201,8 +201,10 @@ label selector 只发现本节点的采集端点。
   且 `app.kubernetes.io/component: volcano-vgpu-device-plugin` 的 Pod
 - `npu-exporter`：`npu-exporter` 命名空间中 `app: npu-exporter` 的 Service
 
-组件装在别处时用 `config.sources` 整体覆盖（数组，顺序即优先级）。该字段默认隐藏：不需要
-配置，只在非标准安装时才用。
+组件装在别处时用 `config.sources` 整体覆盖（数组，顺序即优先级）。该字段默认隐藏：不需要配置，只在非标准安装时才用。
+
+平台把镜像放在自有仓库时设置 `global.imageRegistry`：Chart 用它替换 `image.repository` 的仓库部分，
+保留 `xiaoshiai/accelerator-exporter` 这段路径。下游不需要为此打补丁。
 
 ```bash
 helm upgrade --install accelerator-exporter \
