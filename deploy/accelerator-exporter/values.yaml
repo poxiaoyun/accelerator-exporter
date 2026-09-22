@@ -106,8 +106,15 @@ rbac:
 podAnnotations: {}
 podLabels: {}
 
+# In the cluster the exporter reads kubelet's pod-resources socket as root: the
+# socket is root:root 0755, and connecting to a unix socket needs write
+# permission on it, so a container running as another user cannot read the
+# device allocation facts at all. The relation layer would then stay empty while
+# the exporter reported itself ready. Everything else stays hardened: no
+# privilege escalation, all capabilities dropped, a read-only root filesystem
+# and RuntimeDefault seccomp.
 podSecurityContext:
-  runAsNonRoot: true
+  runAsNonRoot: false
   seccompProfile:
     type: RuntimeDefault
 
@@ -117,9 +124,9 @@ securityContext:
     drop:
       - ALL
   readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65532
-  runAsGroup: 65532
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
 
 containerPort: 9400
 

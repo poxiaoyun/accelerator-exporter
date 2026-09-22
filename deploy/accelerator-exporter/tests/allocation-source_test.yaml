@@ -1,0 +1,44 @@
+# kubelet's pod-resources socket is root:root 0755, and connecting to a unix
+# socket needs write permission on it, so a non-root container cannot read the
+# device allocation facts at all. These assertions pin the posture that makes
+# the relation layer readable, and the hardening that stays.
+suite: device allocation facts source
+templates:
+  - templates/daemonset.yaml
+  - templates/configmap.yaml
+tests:
+  - it: runs as root so kubelet's pod-resources socket is readable
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 0
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsGroup
+          value: 0
+  - it: keeps the remaining container hardening
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value:
+            - ALL
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault

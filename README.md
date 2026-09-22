@@ -271,5 +271,7 @@ feature.node.cloud.xiaoshiai.cn/cpu-model.predefined-name=<model>
 ```
 
 进程启动后立即上报，此后每 30 分钟校验一次；失败时每分钟重试。上报不影响指标服务
-启动或 readiness。主容器保持非 root 运行；除只读挂载 kubelet 的 pod-resources 目录
+启动或 readiness。主容器以 root 运行 —— kubelet 的 pod-resources socket 是 `root:root 0755`，
+而连接 unix socket 需要写权限，非 root 读不到分配事实；其余加固不变（不可提权、drop ALL、
+只读根文件系统、RuntimeDefault seccomp）。除只读挂载 kubelet 的 pod-resources 目录
 （可用 `podResources.hostPath: ""` 关掉）之外不挂载宿主机目录。
