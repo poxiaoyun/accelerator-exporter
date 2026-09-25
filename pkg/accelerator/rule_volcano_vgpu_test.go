@@ -1,6 +1,9 @@
 package accelerator
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // Every label, value and slot number in this file comes from the capture the
 // fixtures describe (node "ubuntu", one RTX 3080, three slices live on it). The
@@ -88,7 +91,7 @@ func TestVolcanoVGPUWithoutTheAllocationSourceProducesNoSeries(t *testing.T) {
 		if sample.Labels[LabelDeviceID] != "" {
 			t.Errorf("no allocation source can still identify a slice: %#v", sample)
 		}
-		if _, reasons := sample.Validate(); !contains(reasons, ViolationMissingIdentity) {
+		if _, reasons := sample.Validate(); !slices.Contains(reasons, ViolationMissingIdentity) {
 			t.Errorf("the identity gap must be reported: %#v", sample)
 		}
 	}

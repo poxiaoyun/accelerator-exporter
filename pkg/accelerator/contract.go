@@ -1,6 +1,9 @@
 package accelerator
 
-import "sort"
+import (
+	"slices"
+	"sort"
+)
 
 // Metric type values of the Prometheus exposition format.
 const (
@@ -196,7 +199,7 @@ func (sample Sample) Validate() (drop bool, reasons []string) {
 	if deviceMode != "" && !isDeviceMode(deviceMode) {
 		return true, []string{ViolationInvalidEnum}
 	}
-	if len(metadata.Modes) > 0 && isDeviceMode(deviceMode) && !contains(metadata.Modes, deviceMode) {
+	if len(metadata.Modes) > 0 && isDeviceMode(deviceMode) && !slices.Contains(metadata.Modes, deviceMode) {
 		return true, []string{ViolationInapplicableMode}
 	}
 
@@ -240,13 +243,4 @@ func validateRelation(sample Sample) (bool, []string) {
 		}
 	}
 	return false, nil
-}
-
-func contains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }

@@ -1,6 +1,8 @@
 package accelerator
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -258,9 +260,7 @@ func applyTarget(
 				continue
 			}
 			labels := identity.deviceLabels()
-			for name, value := range mapping.Enums {
-				labels[name] = value
-			}
+			maps.Copy(labels, mapping.Enums)
 			for _, enum := range mapping.EnumsFrom {
 				value := labelValue(first(raw.Labels, enum.Aliases...))
 				if len(enum.Map) > 0 {
@@ -349,7 +349,7 @@ func appliesTo(metadata MetricMetadata, deviceMode string) bool {
 		// here. Contract validation reports the identity gap instead.
 		return true
 	}
-	return contains(metadata.Modes, deviceMode)
+	return slices.Contains(metadata.Modes, deviceMode)
 }
 
 // resolveIdentity normalizes the identity of one native sample.

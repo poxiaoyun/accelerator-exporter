@@ -1,5 +1,7 @@
 package accelerator
 
+import "maps"
+
 // Identity is the resolved identity, classification, position and static
 // information of one observation target.
 //
@@ -109,8 +111,6 @@ func setIfPresent(labels map[string]string, name, value string) {
 
 func cloneLabels(labels map[string]string) map[string]string {
 	cloned := make(map[string]string, len(labels))
-	for name, value := range labels {
-		cloned[name] = value
-	}
+	maps.Copy(cloned, labels)
 	return cloned
 }

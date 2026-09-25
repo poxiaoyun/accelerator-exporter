@@ -1,6 +1,9 @@
 package accelerator
 
-import "testing"
+import (
+	"maps"
+	"testing"
+)
 
 // The fixture corpus is the shared input of the golden test and the vendor
 // tests. Every fixture is a realistic subset of what the vendor endpoint
@@ -210,12 +213,8 @@ func withLabel(labels map[string]string, name, value string) map[string]string {
 
 func withLabels(labels, additions map[string]string) map[string]string {
 	result := make(map[string]string, len(labels)+len(additions))
-	for name, value := range labels {
-		result[name] = value
-	}
-	for name, value := range additions {
-		result[name] = value
-	}
+	maps.Copy(result, labels)
+	maps.Copy(result, additions)
 	return result
 }
 

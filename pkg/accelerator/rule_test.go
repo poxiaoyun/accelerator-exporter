@@ -1,6 +1,7 @@
 package accelerator
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestDeviceLayerNeverCarriesOwnershipOrVendorLabels(t *testing.T) {
 					t.Errorf("fixture %q put the undeclared label %q on %s", fixture.name, name, sample.Name)
 				}
 			}
-			if metadata.Modes != nil && !contains(metadata.Modes, sample.Labels[LabelDeviceMode]) {
+			if metadata.Modes != nil && !slices.Contains(metadata.Modes, sample.Labels[LabelDeviceMode]) {
 				t.Errorf("fixture %q put %s on a %s target", fixture.name, sample.Name, sample.Labels[LabelDeviceMode])
 			}
 		}
