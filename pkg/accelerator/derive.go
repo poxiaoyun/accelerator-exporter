@@ -10,9 +10,9 @@ func deviceLayerBase(labels map[string]string) map[string]string {
 	return identityFromLabels(labels).deviceLabels()
 }
 
-// deriveMemoryMetrics fills accelerator_memory_total_bytes or
-// accelerator_memory_free_bytes from the other two, and derives the capacity
-// utilization from used and total.
+// deriveMemoryMetrics approximates missing total from measured used and free,
+// and derives capacity utilization from used and total. Used and free must
+// remain measured values; neither can be inferred from the other readings.
 //
 // Values are grouped per observation target rather than per label set, so one
 // target produces one set of memory series instead of one copy per row the
@@ -57,15 +57,6 @@ func deriveMemoryMetrics(samples []Sample) []Sample {
 			current.total = &value
 			derived = appendUnique(derived, existing, Sample{
 				Name: "accelerator_memory_total_bytes", Labels: cloneLabels(current.labels), Value: value,
-			})
-		}
-		if current.free == nil && current.total != nil && current.used != nil {
-			value := *current.total - *current.used
-			if value < 0 {
-				value = 0
-			}
-			derived = appendUnique(derived, existing, Sample{
-				Name: "accelerator_memory_free_bytes", Labels: cloneLabels(current.labels), Value: value,
 			})
 		}
 		if current.used != nil && current.total != nil && *current.total > 0 {

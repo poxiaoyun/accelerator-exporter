@@ -11,9 +11,7 @@ import "strings"
 // A slice has no independent temperature, power, throttle reason or hardware
 // error, and the contract restricts those to physical devices; a consumer reads
 // the card's own readings through parent_device_id instead. The card class
-// therefore carries only what this monitor reports for a card — its core
-// utilization and its memory usage — and it is what makes those readings exist
-// at all on a node that runs no DCGM.
+// carries core utilization even on a node that runs no DCGM.
 
 // volcanoVGPUResource is the extended resource a slice is allocated under. It is
 // also the only place the slice identifier exists, which makes this rule the one
@@ -43,20 +41,16 @@ var volcanoVGPURule = Rule{
 			}},
 		},
 		{
-			// The card itself. These two readings are the ones a consumer looks up
-			// through parent_device_id, and on a node without DCGM this is the only
-			// place they exist. When DCGM is configured too, both rules map the
-			// same metric onto the same target and the source configured first
+			// The card itself. This is the reading a consumer looks up through
+			// parent_device_id, and on a node without DCGM this is the only place
+			// it exists. When DCGM is configured too, both rules map core
+			// utilization onto the same target and the source configured first
 			// wins; see the ordering note in README.
 			Identify: identifyVolcanoVGPUCard,
 			Metrics: []Metric{
-				// TODO(real-machine): confirm both semantics from the monitor's
-				// own help text. HostCoreUtilization is "GPU core utilization" and
-				// HostGPUMemoryUsage is "GPU device memory usage", which is what
-				// these mappings assume; whether the latter includes the driver's
-				// reservation has not been checked, and DCGM's FB_USED does not.
+				// HostGPUMemoryUsage includes driver-reserved memory and cannot
+				// satisfy the contract's used-memory semantics; see DESIGN.md §9.2.
 				{Source: "HostCoreUtilization", Canonical: "accelerator_core_utilization_percentage", Factor: 1},
-				{Source: "HostGPUMemoryUsage", Canonical: "accelerator_memory_used_bytes", Factor: 1},
 			},
 			// A whole-card allocation under nvidia.com/gpu names this card, so it
 			// resolves here too and the relation layer still works without DCGM.

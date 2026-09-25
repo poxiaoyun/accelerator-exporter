@@ -49,7 +49,7 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 配成两条只会把同一端点抓两遍。
 
 `sources` 是**数组，顺序就是优先级**。两个源都可能覆盖同一观测目标上的同一个指标时
-（例如整卡利用率与整卡显存用量，DCGM 从驱动读、vGPU monitor 从自己的采样器读），
+（例如整卡利用率，DCGM 从驱动读、vGPU monitor 从自己的采样器读），
 **配置在前的源优先**，后面那个按重复丢弃并计入 `accelerator_exporter_duplicate_samples_total`。
 胜负不取决于源名，也不取决于哪次抓取先完成。Chart 的默认顺序已按此排好：DCGM 在前。
 
@@ -57,7 +57,9 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 信息，两个源的标签集因此不同，所以它按观测目标键 `(node, device_id)` 判重：每个观测目标只留一条，
 同样保留配置在前的源。同一张卡不会在清单里出现两次。
 
-只配 `volcano-vgpu` 时它自己提供整卡读数，但没有整卡显存总量 —— 该 monitor 不报。
+只配 `volcano-vgpu` 时提供整卡利用率和切片用量，不提供整卡显存指标；整卡显存需要配置 DCGM。
+显存 `used` 与 `free` 只输出符合契约的实测值，不用其他读数补算。Ascend、vNPU 和 vGPU 切片
+没有实测 `free` 时不输出该指标，仍由 `used / total` 计算显存使用率。
 
 ```yaml
 listenAddress: ":9400"

@@ -139,16 +139,16 @@ func TestVolcanoVGPUAllocationResolvesToTheSlicedTarget(t *testing.T) {
 }
 
 // TestVolcanoVGPUReportsTheCardsOwnReadings: the same endpoint also reports the
-// card, and on a node that runs no DCGM this is where the readings a consumer
-// looks up through parent_device_id come from. The card target carries no
-// device_index, because a position label is only meaningful for a partition.
+// card, and on a node that runs no DCGM the card's core utilization comes from
+// here. The card target carries no device_index, because a position label is
+// only meaningful for a partition.
 func TestVolcanoVGPUReportsTheCardsOwnReadings(t *testing.T) {
 	t.Parallel()
 	result := applyFixture(t, fixtures[4])
 
-	card := findSampleWithLabel(t, result.Samples, "accelerator_memory_used_bytes", LabelDeviceMode, DeviceModePhysical)
-	if card.Value != 5044830208 {
-		t.Fatalf("card memory used = %v, want the reading the monitor reported", card.Value)
+	card := findSampleWithLabel(t, result.Samples, "accelerator_core_utilization_percentage", LabelDeviceMode, DeviceModePhysical)
+	if card.Value != 0 {
+		t.Fatalf("card core utilization = %v, want the measured zero", card.Value)
 	}
 	want := map[string]string{
 		LabelDeviceID:   vgpuParentUUID,
@@ -167,12 +167,23 @@ func TestVolcanoVGPUReportsTheCardsOwnReadings(t *testing.T) {
 			t.Errorf("a physical target must not carry %s: %#v", name, card.Labels)
 		}
 	}
+}
 
-	// The slice and the card are different observation targets even though both
-	// report a used-memory series, so the card's reading must not be the slice's.
-	slice := findSampleWithLabel(t, result.Samples, "accelerator_memory_used_bytes", LabelDeviceMode, DeviceModeVirtual)
-	if slice.Value == card.Value {
-		t.Fatalf("the slice and the card reported the same usage: %#v", slice)
+// The card's NVML usage includes driver reservations; only the slice's measured
+// usage satisfies the used-memory contract.
+func TestVolcanoVGPUDoesNotReportTheCardsMemory(t *testing.T) {
+	t.Parallel()
+	result := applyFixture(t, fixtures[4])
+
+	samples := findSamples(t, result.Samples, "accelerator_memory_used_bytes")
+	if len(samples) != 1 {
+		t.Fatalf("want only the slice's own used-memory series, got %d: %s", len(samples), renderSamples(samples))
+	}
+	if samples[0].Labels[LabelDeviceMode] != DeviceModeVirtual {
+		t.Fatalf("the card's HostGPUMemoryUsage must not be mapped to used memory: %#v", samples[0])
+	}
+	if samples[0].Value != 4230087680 {
+		t.Fatalf("slice memory used = %v, want the monitor's measured usage", samples[0].Value)
 	}
 }
 

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `volcano-vgpu` no longer maps the monitor's `HostGPUMemoryUsage` to `accelerator_memory_used_bytes`.
+  Its NVML reading includes driver-reserved memory, which the contract excludes. Nodes using only
+  this source retain physical-card core utilization and slice usage, but no physical-card memory metrics.
+- `accelerator_memory_free_bytes` is emitted only from measured values, never from `total - used`.
+  Ascend, vNPU and vGPU sources without a measured free value omit it; memory utilization remains
+  derived from `used / total`.
+
 ### Fixed
 
 - The observation target inventory is deduplicated by `(node, device_id)` instead of by label set.

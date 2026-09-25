@@ -24,15 +24,23 @@ func TestDeriveMemoryMetricsFromUsedAndFree(t *testing.T) {
 	}
 }
 
-func TestDeriveMemoryMetricsClampsNegativeFree(t *testing.T) {
+func TestDeriveMemoryMetricsRequiresMeasuredFree(t *testing.T) {
 	t.Parallel()
-	labels := map[string]string{LabelNode: "node-a", LabelDeviceID: "GPU-1", LabelDeviceType: DeviceTypeGPU, LabelDeviceMode: DeviceModePhysical}
-	samples := deriveMemoryMetrics([]Sample{
-		{Name: "accelerator_memory_used_bytes", Labels: labels, Value: 20},
-		{Name: "accelerator_memory_total_bytes", Labels: labels, Value: 16},
-	})
-	if free := findSample(t, samples, "accelerator_memory_free_bytes"); free.Value != 0 {
-		t.Fatalf("free = %v, want 0 rather than a negative capacity", free.Value)
+	for _, fixture := range fixtures[2:5] { // Ascend, vNPU and vGPU report used and total, but no free.
+		t.Run(fixture.name, func(t *testing.T) {
+			result := applyFixture(t, fixture)
+			for _, sample := range result.Samples {
+				if sample.Name == "accelerator_memory_free_bytes" {
+					t.Fatalf("free must not be inferred from total and used: %#v", sample)
+				}
+			}
+			used := findSample(t, result.Samples, "accelerator_memory_used_bytes")
+			total := findSample(t, result.Samples, "accelerator_memory_total_bytes")
+			utilization := findSample(t, result.Samples, "accelerator_memory_utilization_percentage")
+			if utilization.Value != used.Value/total.Value*100 {
+				t.Fatalf("utilization = %v, want used / total * 100", utilization.Value)
+			}
+		})
 	}
 }
 

@@ -81,9 +81,10 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 
 - `accelerator_info`、`accelerator_health_diagnostic_info`、`accelerator_throttle_reason_info`
   值恒为 1：rule 决定哪些序列存在，值由契约固定。
-- 显存：`total` 是**设备容量**，`free` 是**可分配余量**。驱动保留或当前不可分配的部分两者都不计，
-  所以 `used + free` 可以小于 `total`，差额就是那部分。`used` 必须存在；`total` 与 `free` 至少一个，
-  缺的那个由另外两个推出，两者都在时不互相覆盖。
+- 显存：`total` 是**设备容量**，`free` 是**可分配余量**。驱动保留或当前不可分配的部分既不计入
+  `used`，也不计入 `free`，所以 `used + free` 可以小于 `total`。`used` 与 `free` 只接收实测值并
+  归一单位，不得由其他读数反推；原生已用值若包含驱动保留，不得映射为 `used`。
+  有显存读数的目标应提供 `used`，以及 `total` 与 `free` 中的至少一个；缺失的实测值保持缺失。
 - `total` 无法由 `used` 与 `free` 精确算出：厂商给容量时直接用（Ascend 的
   `npu_chip_info_hbm_total_memory`），给不出时由规则选一个合理的派生方式（DCGM 用三件套之和，
   见 §7.2），但同一观测目标上的取值必须稳定，不得随 `used` 波动。
@@ -206,8 +207,8 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 
 - `DCGM_EXP_*` 与部分 ECC/NVLink 指标需在 dcgm-exporter 的 collectors 里显式启用，否则该指标
   不存在而不是取到 0。
-- `BuildInventory` 从 DCGM 样本抽出整卡的 `node`/`model`/总显存（`FB_USED + FB_FREE` 的窗口最大值），
-  供 Volcano vGPU 的切片补齐 `node`/`model`——切片自己的指标族没有这两个标签。
+- `BuildInventory` 从 DCGM 样本抽出整卡的 `node`/`model`，供 Volcano vGPU 的切片补齐这两个
+  元数据标签；显存读数由各观测目标自己的采集源提供。
 - 关系层：`nvidia.com/gpu` → `UUID`，仅 physical。MIG 的分配标识未知，见第 10 节。
 
 ## 8. 华为 Ascend（`ascend-npu`）
@@ -330,26 +331,26 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 | 原生指标 | 原生单位 | 契约指标 | 倍率 |
 | :--- | :--- | :--- | :--- |
 | `HostCoreUtilization` | 0–100 | `accelerator_core_utilization_percentage` | ×1 |
-| `HostGPUMemoryUsage` | bytes | `accelerator_memory_used_bytes` | ×1 |
 
 整卡这一族带 `deviceidx`，那是位置，**不产出 `device_index`** —— 规范把该标签限定在 `partition`。
 
+`HostGPUMemoryUsage` 不映射为 `used`：[上游采集器](https://github.com/Project-HAMi/volcano-vgpu-device-plugin/blob/6063efe9806ee7bd2fd966fc65f155c65c95696b/cmd/vgpu-monitor/metrics.go#L153-L156)
+读取 NVML v1 的 `memory.Used`，其定义包含驱动保留（见 [NVML 文档](https://docs.nvidia.com/deploy/nvml-api/api/structnvmlMemory__t.html)），
+不符合第 5 节的显存口径。整卡这一族仅映射核心利用率，显存读数需要 DCGM 等符合契约的来源。
+
 ### 9.3 不映射的与关系层
 
-不映射：温度、功耗、降频原因、硬件错误 —— 契约把它们限制在 physical，而这个 monitor 对整卡也只
-有上面那两条读数，切片更没有。这些读数本来就是父卡自身的事实，消费方沿 `parent_device_id` 取整卡
-的同名序列即可，规范不要求实例重复产出。`accelerator_overall_utilization_percentage` 没有来源。
+不映射：温度、功耗、降频原因、硬件错误 —— 该 monitor 不提供这些读数，契约也只允许 physical
+目标产出。消费方沿 `parent_device_id` 取其他来源提供的整卡同名序列，实例不重复产出。
+`accelerator_overall_utilization_percentage` 没有来源。
 
-但**显存与利用率不能照这个办法省**：整卡的 `used` 含它的全部切片，整卡利用率是整卡口径，而切片
-有自己的限额与用量，必须自己产出。切片出口的三个指标全是这一类。
+但**显存与利用率不能照这个办法省**：整卡利用率是整卡口径，而切片有自己的限额与用量，必须自己产出。
+切片出口的三个指标全是这一类。
 
 整卡那一族是**同一张卡的第二个来源**：DCGM 从驱动读，它从自己的采样器读。两个源同时配时，
-`accelerator_core_utilization_percentage`、`accelerator_memory_used_bytes` 以及 `accelerator_info`
-都会在同一个 `(node, <父卡UUID>)` 上撞在一起，按配置顺序裁决（第 3 节）。这也正是**保留整卡这一族**
-的理由：只有 vGPU monitor、没有 DCGM 的节点上，父卡读数只剩这一个来源，消费方沿 `parent_device_id`
-才查得到东西。
-
-`HostGPUMemoryUsage` 与 DCGM 的 `FB_USED` 是否同一口径尚未真机对齐（第 10 节的假设）。
+`accelerator_core_utilization_percentage` 与 `accelerator_info` 都会在同一个 `(node, <父卡UUID>)`
+上撞在一起，按配置顺序裁决（第 3 节）。这也正是**保留整卡这一族**的理由：只有 vGPU monitor、
+没有 DCGM 的节点上，整卡的利用率只剩这一个来源。
 
 关系层：切片声明 `volcano.sh/vgpu-number`，整卡声明 `nvidia.com/gpu`，`device_id` 分别与设备层共用
 `<父卡>-<槽号>` 和 `<父卡UUID>`，两层才 join 得上。`volcano.sh/vgpu-memory` 的 `DeviceID` 形如
@@ -368,7 +369,6 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 | Ascend 的健康值 1 = 健康 | 若相反，健康与故障会互换且不会报错 |
 | Ascend 设备插件注册的资源名叫 `huawei.com/Ascend910` / `Ascend910B` | 关系层解析不到，不产出序列 |
 | DCGM 每行都带 `UUID` | 退到 `device` 序号，被报成 `decimal_device_id` |
-| vGPU monitor 的 `HostGPUMemoryUsage` 与 DCGM 的 `FB_USED` 同口径 | 两个源同时配、又按配置顺序让 vGPU monitor 先手时，整卡显存用量会换一个口径；`FB_USED` 明确不含驱动保留区，`HostGPUMemoryUsage` 的 help 只写了 "GPU device memory usage" |
 
 结构性缺口（不是假设问题）：
 
@@ -378,9 +378,8 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 - **vGPU 多片配对未验证**：一个容器在同一张卡上持有多片时，`vdeviceid` 只是容器内序号，无法确定
   哪片对哪片，因此暂不产出 `device_id`，而不是按顺序硬配。要落实得在真机上跑一个多片容器，看
   `vdeviceid` 是否确实按容器内分配顺序排列（已实测的场景是"每容器一片"）。
-- **整卡只给出利用率与用量，没有容量**：vGPU monitor 不报整卡显存总量，所以在没有 DCGM 的节点上，
-  整卡只会有 `accelerator_memory_used_bytes`，没有 `total`、`free` 与容量利用率（派生出不来，
-  也不该编）。这是可接受的缺口，不是错误。
+- **vGPU monitor 不提供符合契约的整卡显存读数**：仅配置此源时，整卡只提供核心利用率，显存
+  `used`、`total`、`free` 与容量利用率保持缺失，原因见第 9.2 节。
 - **vNPU 没有父级来源**：`vnpu_pod_*` 只有 `v_dev_id`，没有它被切出来的物理 NPU 标识，
   `parent_device_id` 为空。补它需要一个本仓库尚未读取的分配源。
 - **MIG 与 vNPU 的分配标识未知**：设备插件按什么标识分配它们、对应哪个扩展资源名都不清楚。
