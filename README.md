@@ -91,15 +91,16 @@ sources:
           app.kubernetes.io/component: volcano-vgpu-device-plugin
       port: metrics
 
-  # 按 Service 标签动态发现，并通过 EndpointSlice 展开后端地址。
+  # 按 Pod 标签动态发现。MindCluster 以 DaemonSet 方式部署 npu-exporter
+  # 且不创建 Service，因此按本节点 Pod 标签发现。
   - name: npu-exporter
     rule: ascend-npu
-    serviceMonitor:
+    podMonitor:
       namespaceSelector:
         matchNames: [npu-exporter]
       selector:
         matchLabels:
-          app.kubernetes.io/component: npu-exporter
+          app: npu-exporter
       port: http
 ```
 

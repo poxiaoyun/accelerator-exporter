@@ -50,16 +50,18 @@ sources:
 
   # One source covers the whole npu-exporter endpoint. It exposes both the
   # physical NPU families and the vNPU families, so configuring it twice would
-  # scrape the same endpoint twice and discard half the result.
+  # scrape the same endpoint twice and discard half the result. MindCluster
+  # deploys npu-exporter as a DaemonSet without a Service, so it is discovered
+  # by Pod labels.
   - name: npu-exporter
     rule: ascend-npu
-    serviceMonitor:
+    podMonitor:
       namespaceSelector:
         matchNames:
           - npu-exporter
       selector:
         matchLabels:
           app: npu-exporter
-      port: http-metrics
+      port: http
       path: /metrics
       scheme: http

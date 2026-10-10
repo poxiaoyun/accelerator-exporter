@@ -70,16 +70,21 @@ config:
     # One entry covers the whole npu-exporter endpoint. It exposes both the
     # physical NPU families and the vNPU families, so a separate vNPU entry
     # would scrape the same endpoint twice and discard half the result.
+    # npu-exporter ships as a DaemonSet and MindCluster does not create a
+    # Service for it, so it is discovered by Pod labels on the local node.
+    # MindCluster also guards the pods with a NetworkPolicy that admits only
+    # Prometheus-labelled traffic; on such a cluster set podLabels to
+    # app: prometheus so the exporter passes that policy.
     - name: npu-exporter
       rule: ascend-npu
-      serviceMonitor:
+      podMonitor:
         namespaceSelector:
           matchNames:
             - npu-exporter
         selector:
           matchLabels:
             app: npu-exporter
-        port: http-metrics
+        port: http
         path: /metrics
         scheme: http
 
