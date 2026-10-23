@@ -39,6 +39,24 @@ func TestAscendUsesTheStableIdentifierNotTheChipIndex(t *testing.T) {
 	}
 }
 
+func TestAscendAllocationIDJoinsDevicePluginFact(t *testing.T) {
+	t.Parallel()
+	result := ruleFor(t, RuleAscendNPU).Apply(
+		Environment{Source: Source{Name: "npu", Rule: RuleAscendNPU, Labels: map[string]string{"node": "node-npu"}}},
+		Families{"npu_chip_info_utilization": {{Labels: npuLabels(), Value: 55}}},
+	)
+	samples := BuildPodInfo([]Allocation{{
+		Namespace: "ws-er9msu", Pod: "xvision-lsm-1-training-service", PodUID: "uid-1", Container: "training-service",
+		NativeResource: "huawei.com/Ascend910", NativeDeviceID: "Ascend910-0",
+	}}, result.AllocationIndex)
+	if len(samples) != 1 {
+		t.Fatalf("joined pod info samples = %#v, want one", samples)
+	}
+	if samples[0].Labels[LabelDeviceID] != "Ascend-0" {
+		t.Fatalf("joined device_id = %q, want canonical vdie_id", samples[0].Labels[LabelDeviceID])
+	}
+}
+
 func TestAscendHealthStateFromTheNativeConvention(t *testing.T) {
 	t.Parallel()
 	// The exporter's documented convention is 1 = healthy, so a zero reading is

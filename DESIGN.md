@@ -261,7 +261,9 @@ Kubernetes API 补齐；`container` 与 `pod_uid` 必选，否则同一 Pod 的�
 - `npu_chip_info_process_info_num` 曾经是 `accelerator_used_count` 的来源，该指标已从契约删除
   （归属改由关系层承载）。
 
-关系层：`huawei.com/Ascend910`、`huawei.com/Ascend910B` → `id`/`device`（芯片序号），仅 physical。
+关系层：`huawei.com/Ascend910` 的分配事实使用 `Ascend910-<id>`，
+`huawei.com/Ascend910B` 使用 `Ascend910B-<id>`；采集指标仍以 `vdie_id` 作为设备层的
+`device_id`，通过规则内的分配 ID 归一化后完成精确关联，仅 physical。
 
 ### 8.2 vNPU（`vnpu_pod_*`，`virtual`）
 
@@ -367,7 +369,7 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 | DCGM 的健康严重度用第 7.2 节那张表里的取值 | 表外取值会让该诊断被丢弃（可观测，但不是静默） |
 | Ascend 的 `vdie_id` 是稳定唯一标识 | 若只有纯十进制序号，该目标被报成 `decimal_device_id` |
 | Ascend 的健康值 1 = 健康 | 若相反，健康与故障会互换且不会报错 |
-| Ascend 设备插件注册的资源名叫 `huawei.com/Ascend910` / `Ascend910B` | 关系层解析不到，不产出序列 |
+| Ascend 设备插件使用 `Ascend910-<id>` / `Ascend910B-<id>` 作为分配 ID | 规则按资源族补齐前缀后与 `id` 关联；若设备插件改用其他格式，关系层将解析不到 |
 | DCGM 每行都带 `UUID` | 退到 `device` 序号，被报成 `decimal_device_id` |
 
 结构性缺口（不是假设问题）：

@@ -59,15 +59,20 @@ var ascendNPURule = Rule{
 			Derive: []Deriver{
 				deriveHealthState("npu_chip_info_health_status"),
 			},
-			NativeResources: []NativeResource{{
-				// TODO(real-machine): confirm the extended resource names the
-				// Ascend device plugin registers. The device group name changes
-				// between product generations, so the list is explicit rather
-				// than derived from a prefix.
-				Names:    []string{"huawei.com/Ascend910", "huawei.com/Ascend910B"},
-				Mode:     DeviceModePhysical,
-				DeviceID: func(_ Environment, raw map[string]string) string { return first(raw, "id", "device") },
-			}},
+			NativeResources: []NativeResource{
+				{
+					Names:        []string{"huawei.com/Ascend910"},
+					Mode:         DeviceModePhysical,
+					DeviceID:     ascendChipIndex,
+					AllocationID: prefixAscendAllocationID("Ascend910"),
+				},
+				{
+					Names:        []string{"huawei.com/Ascend910B"},
+					Mode:         DeviceModePhysical,
+					DeviceID:     ascendChipIndex,
+					AllocationID: prefixAscendAllocationID("Ascend910B"),
+				},
+			},
 		},
 		{
 			Identify: identifyAscendVNPU,
@@ -85,6 +90,16 @@ var ascendNPURule = Rule{
 			// but no relation-layer series until that identifier is known.
 		},
 	},
+}
+
+func ascendChipIndex(_ Environment, raw map[string]string) string {
+	return first(raw, "id", "device")
+}
+
+func prefixAscendAllocationID(resource string) func(string) string {
+	return func(deviceID string) string {
+		return resource + "-" + deviceID
+	}
 }
 
 // identifyAscendNPU resolves the physical Ascend NPU observation target.

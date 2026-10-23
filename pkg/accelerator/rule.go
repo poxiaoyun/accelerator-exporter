@@ -207,6 +207,9 @@ func applyTarget(
 			if nativeDeviceID == "" {
 				continue
 			}
+			if native.AllocationID != nil {
+				nativeDeviceID = native.AllocationID(nativeDeviceID)
+			}
 			for _, nativeResource := range native.Names {
 				allocationIndex[allocationKey(nativeResource, nativeDeviceID)] = identity
 			}

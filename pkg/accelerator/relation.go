@@ -42,6 +42,10 @@ type NativeResource struct {
 	// Environment because the identifier is not always a sample label: for a
 	// vGPU slice the allocation fact is the only source of it.
 	DeviceID func(env Environment, raw map[string]string) string
+	// AllocationID converts the observation identifier into the identifier used
+	// by the device plugin allocation facts. Most vendors use the same value;
+	// Ascend's plugin prefixes the chip index with its resource family name.
+	AllocationID func(deviceID string) string
 }
 
 // allocationKey is the lookup key of the allocation index.
