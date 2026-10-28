@@ -94,6 +94,11 @@ func Run(ctx context.Context, options *Options) error {
 	// The same DaemonSet publishes the node's CPU model, which Cloud's node
 	// resource discovery reads back off the Node object.
 	go nodefacts.NewCPUModelPublisher(coreClient.Nodes(), nodeName, logger).Run(ctx)
+	if options.DiskDiscovery.Enabled {
+		disks := nodefacts.NewDiskPublisher(coreClient.Nodes(), nodeName, nodefacts.HostDiskDetector{Root: options.DiskDiscovery.HostRoot}, logger)
+		disks.SetInterval(options.DiskDiscovery.Interval)
+		go disks.Run(ctx)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", metricExporter.Metrics)

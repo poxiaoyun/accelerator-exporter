@@ -19,7 +19,8 @@
         "sources",
         "scrapeInterval",
         "scrapeTimeout",
-        "maxConcurrency"
+        "maxConcurrency",
+        "diskDiscovery"
       ],
       "properties": {
         "sources": {
@@ -57,6 +58,34 @@
           "minimum": 1,
           "default": 8,
           "x-cols": 6
+        },
+        "diskDiscovery": {
+          "type": "object",
+          "title": "空闲磁盘发现",
+          "description": "读取节点宿主机的挂载信息，将非系统块设备的磁盘 ID、挂载路径和容量写入 Node annotation，供 BOSS 和 warmup-csi 使用。",
+          "required": ["enabled", "hostRoot", "interval"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "title": "启用空闲磁盘发现",
+              "description": "是否发布 storage.xiaoshiai.cn/idle-disks annotation。",
+              "default": true
+            },
+            "hostRoot": {
+              "type": "string",
+              "minLength": 1,
+              "title": "宿主机根目录",
+              "description": "宿主机 / 目录在 exporter 容器内的只读挂载路径，通常为 /host-root。",
+              "default": "/host-root"
+            },
+            "interval": {
+              "type": "string",
+              "minLength": 2,
+              "title": "磁盘刷新间隔",
+              "description": "重新扫描节点磁盘和挂载状态的时间间隔。",
+              "default": "30s"
+            }
+          }
         }
       }
     },

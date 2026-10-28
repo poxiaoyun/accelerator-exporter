@@ -42,6 +42,14 @@ type Options struct {
 	PodResourcesSocket string `yaml:"podResourcesSocket,omitempty" description:"kubelet pod-resources socket path"`
 	// Sources are the accelerator metrics sources to collect.
 	Sources []scrapetargets.Source `yaml:"sources" description:"Accelerator metrics sources"`
+	// DiskDiscovery controls publication of node-local idle disk inventory.
+	DiskDiscovery DiskDiscoveryOptions `yaml:"diskDiscovery" description:"Node-local idle disk discovery"`
+}
+
+type DiskDiscoveryOptions struct {
+	Enabled  bool          `yaml:"enabled" description:"Publish idle disk inventory to the Node annotation"`
+	HostRoot string        `yaml:"hostRoot" description:"Host filesystem mounted into the exporter"`
+	Interval time.Duration `yaml:"interval" description:"Disk inventory refresh interval"`
 }
 
 // NewDefaultOptions returns the defaults of a standard kubeadm node, whose
@@ -53,6 +61,7 @@ func NewDefaultOptions() *Options {
 		ScrapeTimeout:      5 * time.Second,
 		MaxConcurrency:     8,
 		PodResourcesSocket: DefaultPodResourcesSocket,
+		DiskDiscovery:      DiskDiscoveryOptions{Enabled: true, HostRoot: "/host-root", Interval: 30 * time.Second},
 	}
 }
 
@@ -95,6 +104,14 @@ func (options *Options) Validate() error {
 	}
 	if len(options.Sources) == 0 {
 		return fmt.Errorf("at least one source must be configured")
+	}
+	if options.DiskDiscovery.Enabled {
+		if strings.TrimSpace(options.DiskDiscovery.HostRoot) == "" {
+			return fmt.Errorf("diskDiscovery.hostRoot is required when disk discovery is enabled")
+		}
+		if options.DiskDiscovery.Interval <= 0 {
+			return fmt.Errorf("diskDiscovery.interval must be positive")
+		}
 	}
 	names := map[string]struct{}{}
 	for index, source := range options.Sources {

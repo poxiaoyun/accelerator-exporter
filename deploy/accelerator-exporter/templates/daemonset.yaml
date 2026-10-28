@@ -74,6 +74,12 @@ spec:
               mountPath: {{ . | quote }}
               readOnly: true
             {{- end }}
+            {{- if .Values.config.diskDiscovery.enabled }}
+            - name: host-root
+              mountPath: {{ .Values.config.diskDiscovery.hostRoot | quote }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            {{- end }}
       volumes:
         - name: config
           configMap:
@@ -87,6 +93,12 @@ spec:
           hostPath:
             path: {{ . | quote }}
             type: DirectoryOrCreate
+        {{- end }}
+        {{- if .Values.config.diskDiscovery.enabled }}
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
         {{- end }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . | quote }}

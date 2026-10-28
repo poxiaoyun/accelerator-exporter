@@ -11,5 +11,9 @@ data:
     scrapeInterval: {{ .Values.config.scrapeInterval | quote }}
     scrapeTimeout: {{ .Values.config.scrapeTimeout | quote }}
     maxConcurrency: {{ .Values.config.maxConcurrency }}
+    diskDiscovery:
+      enabled: {{ .Values.config.diskDiscovery.enabled }}
+      hostRoot: {{ .Values.config.diskDiscovery.hostRoot | quote }}
+      interval: {{ .Values.config.diskDiscovery.interval | quote }}
     sources:
       {{- toYaml .Values.config.sources | nindent 6 }}
