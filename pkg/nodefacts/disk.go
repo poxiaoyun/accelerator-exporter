@@ -160,7 +160,7 @@ func isSystemMount(mountPath string) bool {
 	if mountPath == "/" {
 		return true
 	}
-	for _, prefix := range []string{"/boot", "/etc", "/usr", "/var/lib/kubelet", "/var/lib/containerd", "/var/lib/docker", "/var/lib/crio", "/proc", "/sys", "/dev", "/run"} {
+	for _, prefix := range []string{"/boot", "/etc", "/usr", "/snap", "/var/lib/kubelet", "/var/lib/containerd", "/var/lib/docker", "/var/lib/crio", "/proc", "/sys", "/dev", "/run"} {
 		if mountPath == prefix || strings.HasPrefix(mountPath, prefix+string(filepath.Separator)) {
 			return true
 		}

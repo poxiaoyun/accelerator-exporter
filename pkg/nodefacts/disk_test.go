@@ -73,3 +73,15 @@ func TestHostMountPath(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSystemMountFiltersSnap(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/snap", "/snap/core24/2124"} {
+		if !isSystemMount(path) {
+			t.Errorf("isSystemMount(%q) = false, want true", path)
+		}
+	}
+	if isSystemMount("/cache") {
+		t.Fatal("isSystemMount(/cache) = true, want false")
+	}
+}
