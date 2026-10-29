@@ -15,5 +15,9 @@ data:
       enabled: {{ .Values.config.diskDiscovery.enabled }}
       hostRoot: {{ .Values.config.diskDiscovery.hostRoot | quote }}
       interval: {{ .Values.config.diskDiscovery.interval | quote }}
+    {{- $sources := .Values.config.sources }}
+    {{- if and .Values.config.metrics.enabled (not $sources) }}
+    {{- $sources = include "accelerator-exporter.defaultSources" . | fromYamlArray }}
+    {{- end }}
     sources:
-      {{- toYaml .Values.config.sources | nindent 6 }}
+      {{- toYaml (ternary $sources (list) .Values.config.metrics.enabled) | nindent 6 }}

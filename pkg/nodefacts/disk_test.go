@@ -48,3 +48,28 @@ func TestParseMountInfoLine(t *testing.T) {
 		t.Fatalf("unexpected mount info: %#v", parsed)
 	}
 }
+
+func TestHostMountPath(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		mount     string
+		root      string
+		want      string
+		wantValid bool
+	}{
+		{name: "host root mount", mount: "/host-root", root: "/host-root", want: "/", wantValid: true},
+		{name: "host disk mount", mount: "/host-root/cache", root: "/host-root", want: "/cache", wantValid: true},
+		{name: "nested host disk mount", mount: "/host-root/rune/warmup", root: "/host-root", want: "/rune/warmup", wantValid: true},
+		{name: "outside host root", mount: "/cache", root: "/host-root", wantValid: false},
+		{name: "root host", mount: "/cache", root: "/", want: "/cache", wantValid: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, valid := hostMountPath(test.mount, test.root)
+			if got != test.want || valid != test.wantValid {
+				t.Fatalf("hostMountPath(%q, %q) = (%q, %t), want (%q, %t)", test.mount, test.root, got, valid, test.want, test.wantValid)
+			}
+		})
+	}
+}

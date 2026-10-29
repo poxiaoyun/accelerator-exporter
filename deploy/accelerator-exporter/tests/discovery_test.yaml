@@ -56,3 +56,16 @@ tests:
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: 'rune-system|gpu-operator|volcano-vgpu-device-plugin|npu-exporter'
+  - it: restores built-in sources when metrics are enabled and sources are empty
+    set:
+      config.sources: []
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: nvidia-dcgm-exporter\s+rule: nvidia-dcgm'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: volcano-vgpu-device-plugin\s+rule: volcano-vgpu'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: npu-exporter\s+rule: ascend-npu'

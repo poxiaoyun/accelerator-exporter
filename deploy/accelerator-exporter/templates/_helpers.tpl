@@ -45,3 +45,44 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- printf "%s:%s" $repository (default .Chart.AppVersion .Values.image.tag) }}
 {{- end }}
+
+{{- define "accelerator-exporter.defaultSources" -}}
+- name: nvidia-dcgm-exporter
+  rule: nvidia-dcgm
+  serviceMonitor:
+    namespaceSelector:
+      matchNames:
+        - rune-system
+        - gpu-operator
+    selector:
+      matchLabels:
+        app: nvidia-dcgm-exporter
+    port: gpu-metrics
+    path: /metrics
+    scheme: http
+- name: volcano-vgpu-device-plugin
+  rule: volcano-vgpu
+  podMonitor:
+    namespaceSelector:
+      matchNames:
+        - kube-system
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: volcano-device-plugin
+        app.kubernetes.io/component: volcano-vgpu-device-plugin
+    port: metrics
+    path: /metrics
+    scheme: http
+- name: npu-exporter
+  rule: ascend-npu
+  podMonitor:
+    namespaceSelector:
+      matchNames:
+        - npu-exporter
+    selector:
+      matchLabels:
+        app: npu-exporter
+    port: http
+    path: /metrics
+    scheme: http
+{{- end }}

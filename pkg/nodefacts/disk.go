@@ -66,7 +66,11 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 	result := make([]Disk, 0)
 	for _, line := range strings.Split(string(data), "\n") {
 		mount, ok := parseMountInfoLine(line)
-		if !ok || isSystemMount(mount.MountPoint) || !strings.HasPrefix(mount.Source, "/dev/") {
+		if !ok || !strings.HasPrefix(mount.Source, "/dev/") {
+			continue
+		}
+		mountPath, ok := hostMountPath(mount.MountPoint, root)
+		if !ok || isSystemMount(mountPath) {
 			continue
 		}
 		deviceName := resolveBlockName(root, mount.MajorMinor, mount.Source)
@@ -77,19 +81,19 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 		if id == "" {
 			continue
 		}
-		key := id + "\x00" + mount.MountPoint
+		key := id + "\x00" + mountPath
 		if _, exists := seen[key]; exists {
 			continue
 		}
 		seen[key] = struct{}{}
-		stat, err := statfs(filepath.Join(root, strings.TrimPrefix(mount.MountPoint, "/")))
+		stat, err := statfs(filepath.Join(root, strings.TrimPrefix(mountPath, "/")))
 		if err != nil {
 			continue
 		}
 		result = append(result, Disk{
 			ID:             id,
 			DevicePath:     mount.Source,
-			MountPath:      mount.MountPoint,
+			MountPath:      mountPath,
 			Filesystem:     mount.Filesystem,
 			TotalBytes:     stat.total,
 			FreeBytes:      stat.free,
@@ -103,6 +107,25 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 		return result[i].ID < result[j].ID
 	})
 	return result, nil
+}
+
+// hostMountPath converts a mount point from the current mount namespace into
+// a path relative to the host root bind mount. For example, when the host root
+// is mounted at /host-root, the host's /cache mount appears as /host-root/cache.
+func hostMountPath(mountPoint, hostRoot string) (string, bool) {
+	mountPoint = filepath.Clean(mountPoint)
+	hostRoot = filepath.Clean(hostRoot)
+	if hostRoot == "/" {
+		return mountPoint, true
+	}
+	if mountPoint == hostRoot {
+		return "/", true
+	}
+	prefix := hostRoot + string(filepath.Separator)
+	if !strings.HasPrefix(mountPoint, prefix) {
+		return "", false
+	}
+	return "/" + strings.TrimPrefix(strings.TrimPrefix(mountPoint, prefix), string(filepath.Separator)), true
 }
 
 type mountInfo struct {

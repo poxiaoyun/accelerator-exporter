@@ -10,7 +10,7 @@ image:
   # so that installing from a mirror serves the same repository path.
   repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
   # Defaults to Chart.appVersion so a versioned package deploys its matching image.
-  tag: ""
+  tag: "main"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -21,6 +21,11 @@ config:
   scrapeInterval: 30s
   scrapeTimeout: 10s
   maxConcurrency: 8
+
+  # Metrics scraping and disk discovery run together by default. Set this to
+  # false only for a disk-only deployment.
+  metrics:
+    enabled: true
 
   # exporter reads the host filesystem read-only and publishes mounted,
   # non-system block-device filesystems to the Node annotation.
@@ -33,7 +38,9 @@ config:
   # needs: nothing has to be chosen, and a source whose component is not
   # installed resolves no endpoint and is simply not used. This list is therefore
   # hidden from the configuration page; it is only here so that a cluster which
-  # installs a component somewhere unusual can override its discovery.
+  # installs a component somewhere unusual can override its discovery. When
+  # metrics are enabled and this list is empty, the chart restores these built-in
+  # defaults so an old release cannot silently lose accelerator metrics.
   #
   # The order matters when two entries cover the same metric on the same
   # observation target: the one listed first wins and the other reading is counted

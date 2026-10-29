@@ -20,18 +20,34 @@
         "scrapeInterval",
         "scrapeTimeout",
         "maxConcurrency",
-        "diskDiscovery"
+        "diskDiscovery",
+        "metrics"
       ],
       "properties": {
         "sources": {
           "type": "array",
           "title": "指标源",
-          "description": "全部受支持的指标源默认已开启，无需选择：组件没装的源发现不到端点，等于没配。可以配置为空数组，此时 exporter 仍可独立执行节点磁盘发现和上报。这里只用于覆盖非标准安装的发现参数。排在前面的源优先，两个源覆盖同一观测目标上的同一个指标时，后者的读数按重复丢弃。",
+          "description": "全部受支持的指标源默认已开启，无需选择：组件没装的源发现不到端点，等于没配。指标抓取开启且此数组为空时，Chart 会恢复内置指标源；关闭指标抓取后才会进入仅磁盘发现模式。这里只用于覆盖非标准安装的发现参数。排在前面的源优先，两个源覆盖同一观测目标上的同一个指标时，后者的读数按重复丢弃。",
           "x-hidden": true,
           "x-value-type": "object-array",
           "x-cols": 12,
           "items": {
             "$ref": "#/$defs/source"
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "title": "指标抓取",
+          "description": "控制加速卡指标抓取。启用时，sources 为空会使用 Chart 内置的 NVIDIA、vGPU 和 NPU 指标源；关闭后仅执行磁盘发现和 Node annotation 上报。",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "title": "启用指标抓取",
+              "description": "是否抓取 NVIDIA DCGM、vGPU 和 NPU exporter 指标。默认开启。",
+              "default": true
+            }
           }
         },
         "scrapeInterval": {
