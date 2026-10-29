@@ -11,8 +11,9 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 
 同时，DaemonSet 会以只读方式扫描宿主机的块设备和挂载信息，将非系统盘写入 Node annotation
 `storage.xiaoshiai.cn/idle-disks`。每个条目包含稳定磁盘 ID、设备路径、宿主机挂载路径和容量信息。
-BOSS 在 `storage.xiaoshiai.cn/disk-labels` 中为磁盘设置 `warmup`、`cache` 或 `other` 用途标签，
+BOSS 在 `storage.xiaoshiai.cn/disk-labels` 中为磁盘设置 `warmup` 或 `other` 用途标签，
 warmup-csi 只使用标记为 `warmup` 的磁盘。exporter 只负责发现和上报，不负责格式化或挂载磁盘。
+如果只需要上报节点磁盘而不采集加速卡指标，可以将 `config.sources` 配置为空数组。
 
 - 设计规则（三层模型、标签契约、口径与派生、厂商映射、已知缺口）见 [DESIGN.md](DESIGN.md)。
 - 规范本体见 `specification/Monitoring.md`；本文档只讲怎么配、怎么跑。

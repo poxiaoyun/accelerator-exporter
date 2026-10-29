@@ -49,7 +49,6 @@ sources:
 func TestLoadOptionsRejectsInvalidConfigurations(t *testing.T) {
 	t.Parallel()
 	tests := map[string]string{
-		"no sources":          `sources: []`,
 		"no monitor kind":     `sources: [{name: a, rule: nvidia-dcgm}]`,
 		"both monitor kinds":  `sources: [{name: a, rule: nvidia-dcgm, podMonitor: {namespaces: [gpu], selector: {matchLabels: {app: dcgm}}, port: metrics}, serviceMonitor: {namespaces: [gpu], selector: {matchLabels: {app: dcgm}}, port: metrics}}]`,
 		"unknown rule":        `sources: [{name: a, rule: tpu, podMonitor: {namespaces: [gpu], selector: {matchLabels: {app: dcgm}}, port: metrics}}]`,
@@ -67,6 +66,17 @@ func TestLoadOptionsRejectsInvalidConfigurations(t *testing.T) {
 				t.Errorf("expected an error for:\n%s", contents)
 			}
 		})
+	}
+}
+
+func TestLoadOptionsAllowsEmptySourcesForDiskDiscovery(t *testing.T) {
+	t.Parallel()
+	options, err := LoadOptions(writeConfig(t, `sources: []`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(options.Sources) != 0 {
+		t.Fatalf("sources = %#v, want empty", options.Sources)
 	}
 }
 

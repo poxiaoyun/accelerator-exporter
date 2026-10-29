@@ -92,18 +92,15 @@ func LoadOptions(path string) (*Options, error) {
 
 // Validate reports whether the options can start the process.
 //
-// It validates the whole configuration, including the sources. New validates
-// only the collection loop, because it is handed dependencies that are already
-// built and has no use for the source definitions.
+// It validates the whole configuration, including each configured source. An
+// empty source list is valid: the process can be deployed only for node-local
+// disk discovery and annotation publishing.
 func (options *Options) Validate() error {
 	if options == nil {
 		return fmt.Errorf("exporter options are required")
 	}
 	if err := validateCollection(options.ScrapeInterval, options.ScrapeTimeout, options.MaxConcurrency); err != nil {
 		return err
-	}
-	if len(options.Sources) == 0 {
-		return fmt.Errorf("at least one source must be configured")
 	}
 	if options.DiskDiscovery.Enabled {
 		if strings.TrimSpace(options.DiskDiscovery.HostRoot) == "" {
