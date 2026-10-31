@@ -65,3 +65,17 @@ sources:
       port: http
       path: /metrics
       scheme: http
+
+  # DCU Support exposes a Service regardless of its optional ServiceMonitor.
+  - name: dcu-exporter
+    rule: hygon-dcu
+    serviceMonitor:
+      namespaceSelector:
+        any: true
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: dcu-support
+          app.kubernetes.io/component: exporter
+      port: metrics
+      path: /metrics
+      scheme: http

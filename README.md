@@ -1,6 +1,6 @@
 # accelerator-exporter
 
-`accelerator-exporter` 直接抓取 GPU、NPU、vGPU、vNPU exporter 的 Prometheus
+`accelerator-exporter` 直接抓取 GPU、NPU、DCU 及其虚拟实例 exporter 的 Prometheus
 `/metrics` 地址，在进程内完成指标名、标签和单位转换，并通过自身的 `/metrics`
 统一暴露 `accelerator_*` 指标。
 
@@ -14,7 +14,7 @@ Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节�
 BOSS 在 `storage.xiaoshiai.cn/disk-labels` 中为磁盘设置 `warmup` 或 `other` 用途标签，
 warmup-csi 只使用标记为 `warmup` 的磁盘。exporter 只负责发现和上报，不负责格式化或挂载磁盘。
 Chart 默认同时启用磁盘发现和加速卡指标抓取；当 `config.metrics.enabled=true` 且 `config.sources`
-为空时，Chart 会恢复内置的 NVIDIA DCGM、vGPU 和 NPU 指标源。只有显式设置
+为空时，Chart 会恢复内置的 NVIDIA DCGM、vGPU、NPU 和 DCU 指标源。只有显式设置
 `config.metrics.enabled=false` 时，才会部署为仅上报磁盘的模式。
 
 - 设计规则（三层模型、标签契约、口径与派生、厂商映射、已知缺口）见 [DESIGN.md](DESIGN.md)。
@@ -52,9 +52,21 @@ Chart 默认同时启用磁盘发现和加速卡指标抓取；当 `config.metri
 | `nvidia-dcgm` | NVIDIA DCGM exporter | `gpu` 的整卡（`physical`）与 MIG 切分（`partition`） |
 | `volcano-vgpu` | Volcano vGPU monitor | `gpu` 的 vGPU 实例（`virtual`），以及这些实例所在的整卡（`physical`） |
 | `ascend-npu` | 华为 npu-exporter | `npu` 的整卡（`physical`）与 vNPU（`virtual`） |
+| `hygon-dcu` | 海光 DCU 2.4 exporter | `dcu` 的整卡（`physical`）与预切分 vDCU（`virtual`） |
 
 `ascend-npu` 一条规则覆盖 npu-exporter 的整卡与 vNPU 两族指标，所以同一个端点只配一次；
 配成两条只会把同一端点抓两遍。
+
+`hygon-dcu` 默认发现 `system/dcu-support` 的 Exporter Service（不限安装命名空间），
+由本节点 Endpoint 直接抓取，无需先开启 DCU Exporter 的 ServiceMonitor。已有手工安装的
+官方 Exporter 时，按实际 Service/Pod 标签覆盖发现配置。BW100 等型号从原始 `name` 归一为
+小写 `model`（例如 `bw100`），不按型号硬编码过滤。该规则只支持 DCU 2.4 的 `dcu_*`/`vdcu_*`
+协议；HCU 3.x 的 `hcu_*`/`hygon.com/hcu` 需要另一套映射，不能只改镜像版本。
+
+整卡关系从 kubelet 的 `hygon.com/dcu` PCI 分配 ID 映射到设备识别码；预切分 vDCU 从
+`hygon.com/dcu-share-<CU>c-<GiB>g` 的 `vdev<序号>` 映射到 `<父设备识别码>.<序号>`。
+显存限额从 `vdcu_memory_cap` 字节标签读取，使用率为已用/限额。动态 HAMi 和 MIG 分配暂不映射。
+没有实测来源的空闲显存和健康状态保持缺失，厂商 Pod 标签不替代 kubelet 分配事实。
 
 `sources` 是**数组，顺序就是优先级**。两个源都可能覆盖同一观测目标上的同一个指标时
 （例如整卡利用率，DCGM 从驱动读、vGPU monitor 从自己的采样器读），

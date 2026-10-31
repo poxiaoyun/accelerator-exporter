@@ -56,3 +56,18 @@
 == missing-identity
   accelerator_core_utilization_percentage{device_mode=physical,device_type=gpu,model=unknown,node=node-a,vendor=nvidia} 1
   accelerator_info{device_mode=physical,device_type=gpu,model=unknown,node=node-a,vendor=nvidia} 1
+== hygon-dcu-bw100
+  accelerator_core_utilization_percentage{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 75
+  accelerator_info{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,pci_bus_id=0000:f6:00.0,vendor=hygon} 1
+  accelerator_memory_total_bytes{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 3.4359738368e+10
+  accelerator_memory_used_bytes{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 8.589934592e+09
+  accelerator_memory_utilization_percentage{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 25
+  accelerator_power_limit_watts{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 300
+  accelerator_power_usage_watts{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 180
+  accelerator_temperature_celsius{device_id=T8R1380013061601,device_mode=physical,device_type=dcu,model=bw100,node=node-dcu,vendor=hygon} 52
+== hygon-vdcu
+  accelerator_core_utilization_percentage{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 40
+  accelerator_info{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 1
+  accelerator_memory_total_bytes{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 1.7179869184e+10
+  accelerator_memory_used_bytes{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 4.294967296e+09
+  accelerator_memory_utilization_percentage{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 25

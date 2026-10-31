@@ -31,6 +31,10 @@ type NativeResource struct {
 	// names are listed when a vendor publishes the same device class under more
 	// than one resource name.
 	Names []string
+	// NamesFrom resolves resources whose name encodes the target's native
+	// profile (for example hygon.com/dcu-share-8c-16g). When set it replaces
+	// Names; the rule owns both the profile format and its native units.
+	NamesFrom func(raw map[string]string) []string
 	// Mode is the device mode of the targets allocated under these resources. It
 	// keeps a whole-device allocation from resolving onto a partition or a
 	// virtual instance that happens to report the same native identifier.

@@ -10,7 +10,7 @@ image:
   # so that installing from a mirror serves the same repository path.
   repository: registry.cn-hangzhou.aliyuncs.com/xiaoshiai/accelerator-exporter
   # Defaults to Chart.appVersion so a versioned package deploys its matching image.
-  tag: "main"
+  tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -99,6 +99,21 @@ config:
           matchLabels:
             app: npu-exporter
         port: http
+        path: /metrics
+        scheme: http
+
+    # The DCU Support release may be installed in any namespace. These labels
+    # select only its exporter Service; the discovery layer keeps local endpoints.
+    - name: dcu-exporter
+      rule: hygon-dcu
+      serviceMonitor:
+        namespaceSelector:
+          any: true
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: dcu-support
+            app.kubernetes.io/component: exporter
+        port: metrics
         path: /metrics
         scheme: http
 

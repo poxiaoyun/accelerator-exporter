@@ -108,6 +108,43 @@ var fixtures = []fixture{
 		source:   Source{Name: "nvidia-dcgm-exporter/node-gpu", Rule: RuleNvidiaDCGM},
 		families: Families{"DCGM_FI_DEV_GPU_UTIL": {{Labels: map[string]string{"Hostname": "node-a"}, Value: 1}}},
 	},
+	{
+		// Label shapes from the official exporter source; values are synthetic.
+		name:   "hygon-dcu-bw100",
+		source: Source{Name: "dcu-exporter/node-dcu", Rule: RuleHygonDCU},
+		families: Families{
+			"dcu_utilizationrate":  {{Labels: dcuLabels(), Value: 75}},
+			"dcu_usedmemory_bytes": {{Labels: dcuLabels(), Value: 8589934592}},
+			"dcu_memorycap_bytes":  {{Labels: dcuLabels(), Value: 34359738368}},
+			"dcu_temp":             {{Labels: dcuLabels(), Value: 52}},
+			"dcu_power_usage":      {{Labels: dcuLabels(), Value: 180}},
+			"dcu_powercap":         {{Labels: dcuLabels(), Value: 300}},
+			"dcu_memory_remaining": {{Labels: dcuLabels(), Value: 999}},
+		},
+	},
+	{
+		name:   "hygon-vdcu",
+		source: Source{Name: "dcu-exporter/node-dcu", Rule: RuleHygonDCU},
+		families: Families{
+			"vdcu_utilizationrate":  {{Labels: vdcuLabels(), Value: 40}},
+			"vdcu_usedmemory_bytes": {{Labels: vdcuLabels(), Value: 4294967296}},
+			"vdcu_temp":             {{Labels: vdcuLabels(), Value: 52}},
+		},
+	},
+}
+
+func dcuLabels() map[string]string {
+	return map[string]string{
+		"node": "node-dcu", "device_id": "T8R1380013061601", "minor_number": "0",
+		"name": "BW100", "pcieBus_number": "0000:f6:00.0",
+		"dcu_pod_namespace": "vendor-ns", "dcu_pod_name": "untrusted", "container": "worker",
+	}
+}
+
+func vdcuLabels() map[string]string {
+	return withLabels(dcuLabels(), map[string]string{
+		"vdcu_minor_number": "7", "vdcu_computer_unit": "8", "vdcu_memory_cap": "17179869184",
+	})
 }
 
 func dcgmLabels() map[string]string {

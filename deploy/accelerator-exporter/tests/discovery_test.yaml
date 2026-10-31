@@ -65,7 +65,15 @@ tests:
           pattern: 'name: nvidia-dcgm-exporter\s+rule: nvidia-dcgm'
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'name: volcano-vgpu-device-plugin\s+rule: volcano-vgpu'
+          pattern: '(?s)name: volcano-vgpu-device-plugin\s+podMonitor:.*?rule: volcano-vgpu'
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'name: npu-exporter\s+rule: ascend-npu'
+          pattern: '(?s)name: npu-exporter\s+podMonitor:.*?rule: ascend-npu'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: dcu-exporter\s+rule: hygon-dcu'
+  - it: discovers the DCU Support exporter Service in any installation namespace
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'name: dcu-exporter\s+rule: hygon-dcu\s+serviceMonitor:\s+namespaceSelector:\s+any: true\s+path: /metrics\s+port: metrics\s+scheme: http\s+selector:\s+matchLabels:\s+app.kubernetes.io/component: exporter\s+app.kubernetes.io/name: dcu-support'

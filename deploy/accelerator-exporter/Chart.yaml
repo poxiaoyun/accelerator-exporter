@@ -1,6 +1,6 @@
 apiVersion: v2
 name: accelerator-exporter
-description: Collect and normalize node-local GPU, NPU, vGPU, and vNPU metrics
+description: Collect and normalize node-local GPU, NPU, DCU and virtual accelerator metrics
 type: application
-version: 1.1.1
+version: 1.2.0
 appVersion: main

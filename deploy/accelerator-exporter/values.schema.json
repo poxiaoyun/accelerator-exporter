@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema#",
   "title": "Accelerator Exporter",
-  "description": "以 DaemonSet 部署统一 GPU、NPU、vGPU、vNPU 节点指标采集服务。",
+  "description": "以 DaemonSet 部署统一 GPU、NPU、DCU 及其虚拟实例节点指标采集服务。",
   "type": "object",
   "required": [
     "config",
@@ -38,7 +38,7 @@
         "metrics": {
           "type": "object",
           "title": "指标抓取",
-          "description": "控制加速卡指标抓取。启用时，sources 为空会使用 Chart 内置的 NVIDIA、vGPU 和 NPU 指标源；关闭后仅执行磁盘发现和 Node annotation 上报。",
+          "description": "控制加速卡指标抓取。启用时，sources 为空会使用 Chart 内置的 NVIDIA、vGPU、NPU 和 DCU 指标源；关闭后仅执行磁盘发现和 Node annotation 上报。",
           "required": ["enabled"],
           "additionalProperties": false,
           "properties": {
@@ -300,7 +300,8 @@
           "enum": [
             "nvidia-dcgm",
             "volcano-vgpu",
-            "ascend-npu"
+            "ascend-npu",
+            "hygon-dcu"
           ]
         },
         "labels": {

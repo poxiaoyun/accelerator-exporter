@@ -85,4 +85,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     port: http
     path: /metrics
     scheme: http
+- name: dcu-exporter
+  rule: hygon-dcu
+  serviceMonitor:
+    namespaceSelector:
+      any: true
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: dcu-support
+        app.kubernetes.io/component: exporter
+    port: metrics
+    path: /metrics
+    scheme: http
 {{- end }}

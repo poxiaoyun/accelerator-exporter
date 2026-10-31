@@ -125,6 +125,7 @@ var rules = []Rule{
 	nvidiaDCGMRule,
 	ascendNPURule,
 	volcanoVGPURule,
+	hygonDCURule,
 }
 
 // RuleByName resolves a configured reference to a built-in Rule.
@@ -210,7 +211,11 @@ func applyTarget(
 			if native.AllocationID != nil {
 				nativeDeviceID = native.AllocationID(nativeDeviceID)
 			}
-			for _, nativeResource := range native.Names {
+			names := native.Names
+			if native.NamesFrom != nil {
+				names = native.NamesFrom(raw)
+			}
+			for _, nativeResource := range names {
 				allocationIndex[allocationKey(nativeResource, nativeDeviceID)] = identity
 			}
 		}

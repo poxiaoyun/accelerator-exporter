@@ -98,8 +98,8 @@ func TestExampleConfigStaysLoadable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(options.Sources) != 3 {
-		t.Fatalf("example has %d sources, want 3", len(options.Sources))
+	if len(options.Sources) != 4 {
+		t.Fatalf("example has %d sources, want 4", len(options.Sources))
 	}
 	for _, source := range options.Sources {
 		if (source.PodMonitor == nil) == (source.ServiceMonitor == nil) {

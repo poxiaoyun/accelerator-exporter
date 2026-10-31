@@ -4,7 +4,7 @@
 
 契约本体（指标名、标签、单位、值域、适用形态）定义在 `specification/Monitoring.md`，本文档
 不重复它，只描述**本仓库为每个厂商怎么实现它**：从哪个原生指标取、换什么单位、值域约定是什么、
-哪些取不到以及为什么。第 7–9 节是本文档的主体。
+哪些取不到以及为什么。第 7–10 节是本文档的主体。
 
 ## 1. 定位与边界
 
@@ -358,7 +358,43 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 `<父卡>-<槽号>` 和 `<父卡UUID>`，两层才 join 得上。`volcano.sh/vgpu-memory` 的 `DeviceID` 形如
 `<父卡>-memory-<n>`，看着像槽号但它是显存块的分配，不能当切片标识，所以不声明。
 
-## 10. 身份前提与已知缺口
+## 10. 海光 DCU（`hygon-dcu`）
+
+采集源为 DCU 2.4 Exporter `/metrics`，一个端点同时解释整卡 `dcu_*` 与虚拟实例 `vdcu_*`。
+依据[海光官方 Kubernetes 组件用户指南 §3.1](https://download.sourcefind.cn:65024/file/5/Kubernetes%E6%8F%92%E4%BB%B6/DCU%20Kubernetes%E7%BB%84%E4%BB%B6%E7%94%A8%E6%88%B7%E6%8C%87%E5%8D%97.pdf)，
+并以 [Exporter 源码](https://github.com/Project-HAMi/dcu-exporter/blob/30408d074cd420729f5698710d54fb30abefb0b1/main.go)
+核对实际字段：文档的 `cu_usedmemory_bytes` 是拼写错误，实际为 `dcu_usedmemory_bytes`。
+样例测试的数值是合成数据，标签结构来自这些公开来源，没有 BW100 真机验收结论。
+
+身份：`node` 取样本、缺省取本节点；`model` 取 `name`，归一为小写（`BW100` → `bw100`），
+缺省为 `unknown`；分类固定 `dcu` / `hygon`。整卡 `device_id` 直接取设备识别码，静态
+`pci_bus_id` 来自 `pcieBus_number`。vDCU 的 `device_id` 为 `<device_id>.<vdcu_minor_number>`，
+`parent_device_id` 为整卡识别码；缺父标识或实例序号时不编造实例 ID，按既有身份缺口机制上报。
+
+| 原生指标或标签 | 契约指标 | 单位与口径 |
+| :--- | :--- | :--- |
+| `dcu_utilizationrate` / `vdcu_utilizationrate` | `accelerator_core_utilization_percentage` | 0–100，不乘 100 |
+| `dcu_usedmemory_bytes` / `vdcu_usedmemory_bytes` | `accelerator_memory_used_bytes` | 字节，不乘 MiB |
+| `dcu_memorycap_bytes` | `accelerator_memory_total_bytes` | 整卡容量，字节 |
+| `vdcu_memory_cap` 标签 | `accelerator_memory_total_bytes` | vDCU 限额，解析正整数的字节值；无效或冲突则缺失 |
+| 已用 / 总量 × 100 | `accelerator_memory_utilization_percentage` | 共用显存派生，不混用容量与带宽 |
+| `dcu_temp` | `accelerator_temperature_celsius` | ℃，仅整卡 |
+| `dcu_power_usage` / `dcu_powercap` | `accelerator_power_usage_watts` / `accelerator_power_limit_watts` | W，仅整卡 |
+
+`dcu_memory_remaining` 是可供切分 vDCU 的剩余额度，不是运行时可分配显存，不映射成 `free`。
+没有独立的健康状态来源，不按温度或零错误推导健康；`vdcu_temp` 不复制成虚拟实例温度。
+ECC 字段在指南中解释存在歧义且原生为 Gauge，暂不映射成错误 Counter。
+
+分配协议以[官方作者的设备插件源码](https://github.com/kinglong08/k8s-dcu-device-plugin/tree/25aff110ac522b07f43d9713493ac94a944e820d/internal/pkg)为准：
+
+- 整卡资源 `hygon.com/dcu`，kubelet 分配 ID 是 PCI 地址，与 `pcieBus_number` 精确匹配，
+  关系层输出对应的设备识别码，不用设备序号或厂商 Pod 标签猜归属。
+- 预切分资源 `hygon.com/dcu-share-<CU>c-<GiB>g`，CU 来自 `vdcu_computer_unit`（原生拼写），
+  GiB 按插件实现将字节限额四舍五入；分配 ID 为 `vdev<vdcu_minor_number>`。
+- HAMi 动态切分的 fake ID 和 MIG 不属于当前标准分配协议，不声明这些资源的关系层映射。
+- HCU 3.x 使用 `hcu_*` / `hygon.com/hcu`，不在 `hygon-dcu` 的范围内。
+
+## 11. 身份前提与已知缺口
 
 以下是**假设**而非已验证事实，代码对应位置都有 TODO：
 
@@ -387,7 +423,7 @@ Ascend 把芯片号放在 `id`，那些规则都能从样本直接构造身份�
 - **MIG 与 vNPU 的分配标识未知**：设备插件按什么标识分配它们、对应哪个扩展资源名都不清楚。
   因此这两种形态不产出关系层序列，而不是把父卡的分配关系套到它们身上。
 
-## 11. 契约之外
+## 12. 契约之外
 
 - `batch size`、模型延迟、推理队列、模型吞吐量属于应用或模型运行时指标，不属于加速卡指标。
 - 每个指标的跨厂商可比性由 `specification/Monitoring.md` 的「可比范围」定义。本模块只负责

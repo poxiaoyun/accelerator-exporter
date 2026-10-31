@@ -69,6 +69,7 @@ const (
 const (
 	VendorNVIDIA  = "nvidia"
 	VendorHuawei  = "huawei"
+	VendorHygon   = "hygon"
 	VendorUnknown = "unknown"
 )
 
@@ -96,6 +97,7 @@ const (
 	RuleNvidiaDCGM  = "nvidia-dcgm"
 	RuleAscendNPU   = "ascend-npu"
 	RuleVolcanoVGPU = "volcano-vgpu"
+	RuleHygonDCU    = "hygon-dcu"
 )
 
 // isDeviceClass reports whether the value is a class Cloud understands.

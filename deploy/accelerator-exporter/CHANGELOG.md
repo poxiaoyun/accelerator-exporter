@@ -21,6 +21,26 @@
   `accelerator_exporter_duplicate_samples_total` like any other duplicate. A target whose `device_id`
   did not resolve still falls back to the label set, so incomplete targets are never merged.
 
+## [1.2.0] - 2026-10-31
+
+### Added
+
+- Add the `hygon-dcu` source rule for official DCU 2.4 physical and pre-split
+  virtual devices, including normalized BW100 model names, utilization, memory
+  usage/capacity, physical temperature and power. Parse vDCU capacity from its
+  byte-valued label and derive memory utilization without fabricating free memory.
+- Join whole-card kubelet allocations by PCI address and pre-split vDCU
+  allocations by their profile resource and `vdev<index>` ID. Vendor Pod labels
+  never substitute for allocation facts. Dynamic HAMi/MIG allocation is excluded.
+- Enable discovery of DCU Support exporter Services in the default sources,
+  including the empty-source upgrade fallback. Existing recording rules consume
+  the same `accelerator_*` contract and require no vendor-specific expressions.
+
+### Fixed
+
+- Default image tag now follows Chart.appVersion, so a versioned release deploys
+  its matching image rather than `main`, including offline packages.
+
 ## [1.0.4] - 2026-09-22
 
 ### Breaking
