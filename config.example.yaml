@@ -79,3 +79,30 @@ sources:
       port: metrics
       path: /metrics
       scheme: http
+
+  # Local endpoints of Iluvatar Support; ownership comes from kubelet UUIDs.
+  - name: ix-exporter
+    rule: iluvatar-ix
+    serviceMonitor:
+      namespaceSelector:
+        any: true
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: iluvatar-support
+          app.kubernetes.io/component: exporter
+      port: metrics
+      path: /metrics
+      scheme: http
+
+  - name: iluvatar-vgpu-manager
+    rule: iluvatar-vgpu
+    serviceMonitor:
+      namespaceSelector:
+        any: true
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: iluvatar-vgpu-manager
+          app.kubernetes.io/component: manager
+      port: metrics
+      path: /metric
+      scheme: http

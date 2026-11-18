@@ -67,10 +67,11 @@ const (
 
 // Vendor names, lower-cased. An unrecognised vendor is VendorUnknown.
 const (
-	VendorNVIDIA  = "nvidia"
-	VendorHuawei  = "huawei"
-	VendorHygon   = "hygon"
-	VendorUnknown = "unknown"
+	VendorNVIDIA   = "nvidia"
+	VendorHuawei   = "huawei"
+	VendorHygon    = "hygon"
+	VendorIluvatar = "iluvatar"
+	VendorUnknown  = "unknown"
 )
 
 // Health state values of accelerator_health_state.
@@ -94,10 +95,12 @@ const ModelUnknown = "unknown"
 // Built-in Rule names. These are the only accepted values of a source's rule
 // field, and they match the presets in deploy/accelerator-exporter/values.yaml.
 const (
-	RuleNvidiaDCGM  = "nvidia-dcgm"
-	RuleAscendNPU   = "ascend-npu"
-	RuleVolcanoVGPU = "volcano-vgpu"
-	RuleHygonDCU    = "hygon-dcu"
+	RuleNvidiaDCGM   = "nvidia-dcgm"
+	RuleAscendNPU    = "ascend-npu"
+	RuleVolcanoVGPU  = "volcano-vgpu"
+	RuleHygonDCU     = "hygon-dcu"
+	RuleIluvatarIX   = "iluvatar-ix"
+	RuleIluvatarVGPU = "iluvatar-vgpu"
 )
 
 // isDeviceClass reports whether the value is a class Cloud understands.

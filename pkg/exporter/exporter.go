@@ -210,7 +210,7 @@ func (e *Exporter) Refresh(ctx context.Context) error {
 	e.state.allocationSourceUp = e.state.allocationConfigured && allocationErr == nil
 
 	var converted []accelerator.Sample
-	var allocationIndexes []map[string]accelerator.Identity
+	var allocationIndexes []accelerator.AllocationIndex
 	successfulTargets := 0
 	var duplicateSamples uint64
 	for _, result := range results {

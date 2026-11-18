@@ -52,6 +52,9 @@ type NativeResource struct {
 	AllocationID func(deviceID string) string
 }
 
+// AllocationIndex permits one allocation to span multiple observed physical parents.
+type AllocationIndex map[string][]Identity
+
 // allocationKey is the lookup key of the allocation index.
 func allocationKey(nativeResource, nativeDeviceID string) string {
 	return nativeResource + "\xff" + nativeDeviceID
@@ -64,19 +67,18 @@ func allocationKey(nativeResource, nativeDeviceID string) string {
 // that resolve to no observation target are skipped, and so are allocations that
 // do not name a Pod UID: the specification makes pod_uid mandatory because two
 // Pods with the same name are different allocation relationships.
-func BuildPodInfo(allocations []Allocation, indexes ...map[string]Identity) []Sample {
+func BuildPodInfo(allocations []Allocation, indexes ...AllocationIndex) []Sample {
 	if len(allocations) == 0 {
 		return nil
 	}
-	resolved := map[string]Identity{}
+	resolved := AllocationIndex{}
 	for _, index := range indexes {
 		for key, identity := range index {
 			// First wins, as everywhere else an allocation or a series can be
 			// reached through more than one source: the provider order is the
 			// configured order of the sources, so letting a later source
 			// overwrite would make the outcome depend on which sources happen to
-			// be enabled. Today every declaration of one resource resolves to the
-			// same node and device_id, so this only removes the surprise.
+			// be enabled. Keep every parent resolved by that first source.
 			if _, exists := resolved[key]; exists {
 				continue
 			}
@@ -90,25 +92,27 @@ func BuildPodInfo(allocations []Allocation, indexes ...map[string]Identity) []Sa
 		if allocation.Namespace == "" || allocation.Pod == "" || allocation.Container == "" || allocation.PodUID == "" {
 			continue
 		}
-		identity, ok := resolved[allocationKey(allocation.NativeResource, allocation.NativeDeviceID)]
+		identities, ok := resolved[allocationKey(allocation.NativeResource, allocation.NativeDeviceID)]
 		if !ok {
 			continue
 		}
-		labels := map[string]string{
-			LabelNode:      identity.Node,
-			LabelDeviceID:  identity.DeviceID,
-			LabelNamespace: allocation.Namespace,
-			LabelPod:       allocation.Pod,
-			LabelPodUID:    allocation.PodUID,
-			LabelContainer: allocation.Container,
+		for _, identity := range identities {
+			labels := map[string]string{
+				LabelNode:      identity.Node,
+				LabelDeviceID:  identity.DeviceID,
+				LabelNamespace: allocation.Namespace,
+				LabelPod:       allocation.Pod,
+				LabelPodUID:    allocation.PodUID,
+				LabelContainer: allocation.Container,
+			}
+			sample := Sample{Name: PodInfoMetricName, Labels: labels, Value: 1}
+			key := sampleKey(sample)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			samples = append(samples, sample)
 		}
-		sample := Sample{Name: PodInfoMetricName, Labels: labels, Value: 1}
-		key := sampleKey(sample)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		samples = append(samples, sample)
 	}
 	return samples
 }

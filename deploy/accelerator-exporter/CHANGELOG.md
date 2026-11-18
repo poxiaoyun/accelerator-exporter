@@ -1,6 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-11-18
+
+### Added
+
+- Add official Iluvatar GPU Manager virtual-instance utilization and used memory,
+  with UUID-backed parent resolution and kubelet allocation relationships across
+  multiple physical parents. Aggregate rows and unmeasured slice capacities are omitted.
+
+- Add the `iluvatar-ix` rule for official IX Exporter 4.3.0 physical GPU metrics:
+  core and memory activity, measured memory in MiB converted to bytes, temperature,
+  power and volatile ECC diagnostics. Capacity utilization is derived from used/total.
+- Join `iluvatar.com/gpu` allocations by exact chip UUID. Vendor workload labels,
+  numeric GPU indices and time-slicing aliases never substitute for allocation facts.
+- Discover Iluvatar Support exporter Services in any namespace, including the
+  empty-source fallback. Supply node identity from local endpoint discovery when
+  IX Exporter runs without its Kubernetes collector.
 
 ### Changed
 

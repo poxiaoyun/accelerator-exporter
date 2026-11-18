@@ -39,7 +39,9 @@
           "type": "object",
           "title": "指标抓取",
           "description": "控制加速卡指标抓取。启用时，sources 为空会使用 Chart 内置的 NVIDIA、vGPU、NPU 和 DCU 指标源；关闭后仅执行磁盘发现和 Node annotation 上报。",
-          "required": ["enabled"],
+          "required": [
+            "enabled"
+          ],
           "additionalProperties": false,
           "properties": {
             "enabled": {
@@ -78,7 +80,11 @@
           "type": "object",
           "title": "空闲磁盘发现",
           "description": "读取节点宿主机的挂载信息，将非系统块设备的磁盘 ID、挂载路径和容量写入 Node annotation，供 BOSS 和 warmup-csi 使用。",
-          "required": ["enabled", "hostRoot", "interval"],
+          "required": [
+            "enabled",
+            "hostRoot",
+            "interval"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -301,7 +307,9 @@
             "nvidia-dcgm",
             "volcano-vgpu",
             "ascend-npu",
-            "hygon-dcu"
+            "hygon-dcu",
+            "iluvatar-ix",
+            "iluvatar-vgpu"
           ]
         },
         "labels": {

@@ -71,3 +71,13 @@
   accelerator_memory_total_bytes{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 1.7179869184e+10
   accelerator_memory_used_bytes{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 4.294967296e+09
   accelerator_memory_utilization_percentage{device_id=T8R1380013061601.7,device_mode=virtual,device_type=dcu,model=bw100,node=node-dcu,parent_device_id=T8R1380013061601,vendor=hygon} 25
+== iluvatar-mrc-v100
+  accelerator_core_utilization_percentage{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 75
+  accelerator_info{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 1
+  accelerator_memory_bandwidth_utilization_percentage{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 91
+  accelerator_memory_free_bytes{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 2.5690112e+10
+  accelerator_memory_total_bytes{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 3.4359738368e+10
+  accelerator_memory_used_bytes{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 8.589934592e+09
+  accelerator_memory_utilization_percentage{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 25
+  accelerator_power_usage_watts{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 24
+  accelerator_temperature_celsius{device_id=GPU-468a5c87-da50-4a5a-96d7-8debc120e9e2,device_mode=physical,device_type=gpu,model=mrc-v100,node=ty1200,vendor=iluvatar} 39

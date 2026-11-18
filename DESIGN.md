@@ -394,7 +394,40 @@ ECC 字段在指南中解释存在歧义且原生为 Gauge，暂不映射成错�
 - HAMi 动态切分的 fake ID 和 MIG 不属于当前标准分配协议，不声明这些资源的关系层映射。
 - HCU 3.x 使用 `hcu_*` / `hygon.com/hcu`，不在 `hygon-dcu` 的范围内。
 
-## 11. 身份前提与已知缺口
+## 11. 天数 IX（`iluvatar-ix`）
+
+协议基线是官方 [IX Exporter 4.3.0](https://github.com/Deep-Spark/ix-exporter/tree/v4.3.0)
+与 [IX Device Plugin 4.3.0](https://github.com/Deep-Spark/ix-device-plugin/tree/v4.3.0)。
+当前目标是 MRC-V100，按物理芯片 UUID 识别，分类为 `gpu` / `physical` / `iluvatar`。
+`name` 归一为小写型号；平台将驱动名称 `MRC-V100-0x1B` 明确映射为 `mrc-v100`。
+
+| 原生指标 | 契约指标 | 换算 |
+| :--- | :--- | :--- |
+| `ix_gpu_utilization` | `accelerator_core_utilization_percentage` | 0–100 |
+| `ix_mem_utilization` | `accelerator_memory_bandwidth_utilization_percentage` | 显存活动，不是容量占比 |
+| `ix_mem_total` / `ix_mem_used` / `ix_mem_free` | 对应的 `accelerator_memory_*_bytes` | MiB × 1048576 |
+| `ix_temperature` | `accelerator_temperature_celsius` | °C |
+| `ix_power_usage` | `accelerator_power_usage_watts` | W |
+| `ix_ecc_sbe_vol_status` / `ix_ecc_dbe_vol_status` | `accelerator_health_diagnostic_info` | 非零状态分别生成 warning / critical 诊断 |
+
+容量利用率由实测 `used / total * 100` 派生；没有实测 `free` 时保持缺失。
+ECC 原生是状态标志，不映射为 `_total`。没有完整健康检查与功耗上限来源，因此不产出
+健康状态、功耗上限，也不拿最后一次 XID 编码冒充累计错误数。
+
+`system/iluvatar-support` 使用 `splitboard=true`，不启用时间切片或 Volcano 协议，
+`iluvatar.com/gpu` 的分配 ID 与观测的 `uuid` 精确关联。多芯片整板聚合与 `UUID::<副本>`
+别名不在这个关系协议中，缺失 UUID 时也不使用 `gpu` 数字序号替代。
+设备层不携带厂商 Pod 标签；归属仍只来自 kubelet pod-resources 和真实 Pod UID。
+
+默认发现不限命名空间的 Iluvatar Support Exporter Service，只保留当前节点的就绪端点。
+IX 4.3.0 关闭自身 Kubernetes 采集时只暴露 `gpu/name/uuid`，节点身份由本地发现补齐。
+更新版本带有 `driver`、`serial` 标签时，静态清单保留它们；不由镜像版本推断驱动版本。
+
+已读取目标节点的 `ixsmi` 识别信息并核对官方源码，尚未部署组件验证实际 HTTP 读数与分配。
+尤其需要在真机负载下确认 IX DCGM 的 `used/free` 与契约的驱动保留区边界一致；
+若某个驱动的 `used` 包含保留区，应停止映射该读数，不能改用 `total-free` 反推。
+
+## 12. 身份前提与已知缺口
 
 以下是**假设**而非已验证事实，代码对应位置都有 TODO：
 
@@ -423,10 +456,24 @@ ECC 字段在指南中解释存在歧义且原生为 Gauge，暂不映射成错�
 - **MIG 与 vNPU 的分配标识未知**：设备插件按什么标识分配它们、对应哪个扩展资源名都不清楚。
   因此这两种形态不产出关系层序列，而不是把父卡的分配关系套到它们身上。
 
-## 12. 契约之外
+## 13. 契约之外
 
 - `batch size`、模型延迟、推理队列、模型吞吐量属于应用或模型运行时指标，不属于加速卡指标。
 - 每个指标的跨厂商可比性由 `specification/Monitoring.md` 的「可比范围」定义。本模块只负责
   按该定义产出取值，自身不做任何聚合，也不为某个厂商的细分口径另立指标。
 - 归因层不属于本模块，本模块只提供 join 所需的两层。
 - 不为填补空缺伪造数值：缺口用不产出表达，不用 0 或节点均值表达。
+
+
+## 12. 天数虚拟卡（`iluvatar-vgpu`）
+
+官方 GPU Manager v3.0.8 `/metric` 的 `container_gpu_utilization`、
+`container_gpu_memory_total` 分别表示逐卡利用率、已用显存 MiB。后者名称中的 total
+不代表容量；其利用率分母为物理容量，也不能作为切片显存利用率。只转换 `gpuN` 行，
+忽略重复的 `total` 汇总行，不伪造切片容量、功耗、温度或健康状态。
+
+物理父设备通过同轮 IX 指标的 `(node, gpu index) -> uuid` 显式对照确定，数字索引不作为
+公开设备 ID。索引冲突或 IX 源失败时保持身份缺口。容器名称只用来选择 kubelet 分配事实；
+必须存在真实 Pod UID、对应型号的 vCore/vMem native IDs。与官方 GenerateVcudaID 一致，
+将排序后的 native IDs 做 SHA256，并以物理 UUID 区分跨卡的虚拟观测对象。
+AllocationIndex 支持一个分配事实对应多个父卡上的对象，关系仍由分配事实建立并去重。

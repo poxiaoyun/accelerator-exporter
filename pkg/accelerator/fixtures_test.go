@@ -131,6 +131,19 @@ var fixtures = []fixture{
 			"vdcu_temp":             {{Labels: vdcuLabels(), Value: 52}},
 		},
 	},
+	{
+		name:   "iluvatar-mrc-v100",
+		source: iluvatarEnvironment().Source,
+		families: Families{
+			"ix_gpu_utilization": {{Labels: iluvatarLabels(), Value: 75}},
+			"ix_mem_total":       {{Labels: iluvatarLabels(), Value: 32768}},
+			"ix_mem_used":        {{Labels: iluvatarLabels(), Value: 8192}},
+			"ix_mem_free":        {{Labels: iluvatarLabels(), Value: 24500}},
+			"ix_mem_utilization": {{Labels: iluvatarLabels(), Value: 91}},
+			"ix_temperature":     {{Labels: iluvatarLabels(), Value: 39}},
+			"ix_power_usage":     {{Labels: iluvatarLabels(), Value: 24}},
+		},
+	},
 }
 
 func dcuLabels() map[string]string {

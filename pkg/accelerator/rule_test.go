@@ -9,7 +9,7 @@ import (
 
 func TestRuleRegistry(t *testing.T) {
 	t.Parallel()
-	want := []string{RuleAscendNPU, RuleHygonDCU, RuleNvidiaDCGM, RuleVolcanoVGPU}
+	want := []string{RuleAscendNPU, RuleHygonDCU, RuleIluvatarIX, RuleIluvatarVGPU, RuleNvidiaDCGM, RuleVolcanoVGPU}
 	if got := RuleNames(); len(got) != len(want) {
 		t.Fatalf("RuleNames() = %v, want %v", got, want)
 	} else {

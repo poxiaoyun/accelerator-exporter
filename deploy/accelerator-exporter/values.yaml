@@ -117,6 +117,33 @@ config:
         path: /metrics
         scheme: http
 
+    # Iluvatar Support exposes a Service in its installation namespace.
+    - name: ix-exporter
+      rule: iluvatar-ix
+      serviceMonitor:
+        namespaceSelector:
+          any: true
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: iluvatar-support
+            app.kubernetes.io/component: exporter
+        port: metrics
+        path: /metrics
+        scheme: http
+
+    - name: iluvatar-vgpu-manager
+      rule: iluvatar-vgpu
+      serviceMonitor:
+        namespaceSelector:
+          any: true
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: iluvatar-vgpu-manager
+            app.kubernetes.io/component: manager
+        port: metrics
+        path: /metric
+        scheme: http
+
 # accelerator_pod_info is built from kubelet's device allocation facts, read from
 # the pod-resources socket. The directory is mounted read-only at the same path
 # inside the container, so the default --pod-resources-socket keeps working.

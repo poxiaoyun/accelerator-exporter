@@ -7,15 +7,17 @@ import (
 	"strings"
 )
 
-// Inventory maps a native physical device identifier onto the metadata that
-// only some metric families of the source carry.
+// Inventory maps native physical identifiers and vendor-scoped node-local
+// aliases onto observed physical metadata. Aliases always resolve to real UUIDs.
 type Inventory map[string]DeviceInfo
 
 // DeviceInfo is physical device metadata used to complete virtual instance
 // samples whose own metric family omits node and model.
 type DeviceInfo struct {
-	Node  string
-	Model string
+	// DeviceID is set for a node-local index alias backed by an observed UUID.
+	DeviceID string
+	Node     string
+	Model    string
 }
 
 // InventoryInput is one successful source scrape offered to BuildInventory.
@@ -92,6 +94,8 @@ type Deriver func(raw Families, converted []Sample, identities map[string]Identi
 // For example npu-exporter exposes both physical NPU and vNPU metric families,
 // so its Rule has two Targets and the same endpoint is scraped once.
 type Target struct {
+	// Select excludes aggregate rows when a source also reports per-device rows.
+	Select func(raw map[string]string) bool
 	// Identify resolves the observation target identity from one native sample.
 	// It may return an incomplete identity: Apply keeps the measurement and
 	// leaves the unresolved labels out, and contract validation reports the gap
@@ -126,6 +130,8 @@ var rules = []Rule{
 	ascendNPURule,
 	volcanoVGPURule,
 	hygonDCURule,
+	iluvatarIXRule,
+	iluvatarVGPURule,
 }
 
 // RuleByName resolves a configured reference to a built-in Rule.
@@ -157,7 +163,7 @@ type Result struct {
 	Identities map[string]Identity
 	// AllocationIndex resolves one allocation fact to an observation target,
 	// keyed by allocationKey.
-	AllocationIndex map[string]Identity
+	AllocationIndex AllocationIndex
 }
 
 // Apply normalizes one source scrape into device-layer samples.
@@ -174,7 +180,7 @@ type Result struct {
 func (rule Rule) Apply(env Environment, families Families) Result {
 	result := Result{
 		Identities:      map[string]Identity{},
-		AllocationIndex: map[string]Identity{},
+		AllocationIndex: AllocationIndex{},
 	}
 	for _, target := range rule.Targets {
 		converted, identities := applyTarget(target, env, families, result.AllocationIndex)
@@ -192,7 +198,7 @@ func (rule Rule) Apply(env Environment, families Families) Result {
 }
 
 func applyTarget(
-	target Target, env Environment, families Families, allocationIndex map[string]Identity,
+	target Target, env Environment, families Families, allocationIndex AllocationIndex,
 ) ([]Sample, map[string]Identity) {
 	var samples []Sample
 	identities := map[string]Identity{}
@@ -216,7 +222,11 @@ func applyTarget(
 				names = native.NamesFrom(raw)
 			}
 			for _, nativeResource := range names {
-				allocationIndex[allocationKey(nativeResource, nativeDeviceID)] = identity
+				key := allocationKey(nativeResource, nativeDeviceID)
+				existing := allocationIndex[key]
+				if !slices.ContainsFunc(existing, func(value Identity) bool { return value.Key() == identity.Key() }) {
+					allocationIndex[key] = append(existing, identity)
+				}
 			}
 		}
 	}
@@ -239,6 +249,9 @@ func applyTarget(
 		}
 		metadata, _ := CanonicalMetric(name)
 		for _, raw := range families[name] {
+			if target.Select != nil && !target.Select(raw.Labels) {
+				continue
+			}
 			identity := resolveIdentity(target, raw, env)
 			if !appliesTo(metadata, identity.DeviceMode) {
 				continue
@@ -255,6 +268,9 @@ func applyTarget(
 	for _, mapping := range target.Metrics {
 		metadata, _ := CanonicalMetric(mapping.Canonical)
 		for _, raw := range families[mapping.Source] {
+			if target.Select != nil && !target.Select(raw.Labels) {
+				continue
+			}
 			identity := resolveIdentity(target, raw, env)
 			// The target is recorded before the mapping decides whether this
 			// particular row is a measurement it can express. A device that is
@@ -319,6 +335,9 @@ func sumMapping(
 			return nil, false
 		}
 		for _, raw := range family {
+			if target.Select != nil && !target.Select(raw.Labels) {
+				continue
+			}
 			identity := resolveIdentity(target, raw, env)
 			record(identity, raw.Labels)
 			key := identity.Key()
