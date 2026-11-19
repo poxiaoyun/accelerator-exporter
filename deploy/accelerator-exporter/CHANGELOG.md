@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.1] - 2026-11-19
+
+### Added
+
+- Each disk in the Node annotation `storage.xiaoshiai.cn/idle-disks` now includes
+  `interface`. The closed set is `nvme`, `sata`, `scsi`, `virtio`, and `unknown`.
+- The value comes from the kernel whole-disk name and the udev `by-path` link,
+  using the same rules as `rune_node_disk_device_info`. It does not read smartctl.
+
+### Notes
+
+- `scsi` does not distinguish SAS, hardware-RAID logical disks, and SATA behind an HBA.
+- `sd*` without a bus path, and USB, Fibre Channel, and iSCSI paths, are `unknown`.
+- The DaemonSet writes the field on its next scan. An annotation left by an older
+  exporter has no `interface`; consumers show that as missing and do not infer it
+  from the device name. warmup-csi does not read the field.
+
 ## [1.3.0] - 2026-11-18
 
 ### Added
