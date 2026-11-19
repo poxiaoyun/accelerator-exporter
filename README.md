@@ -10,7 +10,9 @@ Helm Chart 中的 DaemonSet 还会识别当前节点的 CPU 型号，并通过 K
 Node 标签 `feature.node.cloud.xiaoshiai.cn/cpu-model.name`，供 Cloud 的节点资源发现直接使用。
 
 同时，DaemonSet 会以只读方式扫描宿主机的块设备和挂载信息，将非系统盘写入 Node annotation
-`storage.xiaoshiai.cn/idle-disks`。每个条目包含稳定磁盘 ID、设备路径、宿主机挂载路径和容量信息。
+`storage.xiaoshiai.cn/idle-disks`。每个条目包含稳定磁盘 ID、设备路径、宿主机挂载路径、容量信息，
+以及接口类型 `interface`（`nvme`、`sata`、`scsi`、`virtio`、`unknown`）。接口类型按内核整盘名和
+udev `by-path` 判定，规则与 `specification/Monitoring.md` 的 `rune_node_disk_device_info` 相同。
 BOSS 在 `storage.xiaoshiai.cn/disk-labels` 中为磁盘设置 `warmup` 或 `other` 用途标签，
 warmup-csi 只使用标记为 `warmup` 的磁盘。exporter 只负责发现和上报，不负责格式化或挂载磁盘。
 Chart 默认同时启用磁盘发现和加速卡指标抓取；当 `config.metrics.enabled=true` 且 `config.sources`

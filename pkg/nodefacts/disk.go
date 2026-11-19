@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -34,6 +35,9 @@ type Disk struct {
 	TotalBytes     uint64 `json:"totalBytes"`
 	FreeBytes      uint64 `json:"freeBytes"`
 	AvailableBytes uint64 `json:"availableBytes"`
+	// Interface is the host bus of the whole disk. It uses the closed set from
+	// specification/Monitoring.md and is never inferred by consumers.
+	Interface string `json:"interface"`
 }
 
 // DiskDetector supplies the node-local inventory. Keeping it as an interface
@@ -62,6 +66,7 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 		return nil, fmt.Errorf("read host mountinfo: %w", err)
 	}
 	ids := deviceIDs(root)
+	busPaths := diskBusPaths(root)
 	seen := map[string]struct{}{}
 	result := make([]Disk, 0)
 	for _, line := range strings.Split(string(data), "\n") {
@@ -74,6 +79,7 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 			continue
 		}
 		deviceName := resolveBlockName(root, mount.MajorMinor, mount.Source)
+		kernelName := kernelDiskName(deviceName, mount.Source)
 		id := ids[deviceName]
 		if id == "" {
 			id = deviceName
@@ -98,6 +104,7 @@ func (d HostDiskDetector) Detect(ctx context.Context) ([]Disk, error) {
 			TotalBytes:     stat.total,
 			FreeBytes:      stat.free,
 			AvailableBytes: stat.available,
+			Interface:      diskInterface(kernelName, busPaths[kernelName]),
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -194,6 +201,93 @@ func deviceIDs(root string) map[string]string {
 		if _, exists := result[item.name]; !exists {
 			result[item.name] = item.id
 		}
+	}
+	return result
+}
+
+var (
+	nvmeDisk   = regexp.MustCompile(`^(nvme[0-9]+n[0-9]+)(?:p[0-9]+)?$`)
+	sdDisk     = regexp.MustCompile(`^(sd[a-z]+)[0-9]*$`)
+	virtioDisk = regexp.MustCompile(`^((?:xvd|vd)[a-z]+)[0-9]*$`)
+)
+
+// kernelDiskName prefers the sysfs parent when that parent is a whole disk.
+// The source path is the fallback: resolveBlockName strips NVMe namespace
+// digits when sysfs is missing, and a partition name cannot be classified.
+func kernelDiskName(resolved, source string) string {
+	if whole, ok := wholeDisk(resolved); ok && whole == resolved {
+		return resolved
+	}
+	if whole, ok := wholeDisk(filepath.Base(source)); ok {
+		return whole
+	}
+	if resolved != "" {
+		return resolved
+	}
+	return filepath.Base(source)
+}
+
+func wholeDisk(name string) (string, bool) {
+	name = filepath.Base(name)
+	for _, pattern := range []*regexp.Regexp{nvmeDisk, virtioDisk, sdDisk} {
+		if part := pattern.FindStringSubmatch(name); part != nil {
+			return part[1], true
+		}
+	}
+	return "", false
+}
+
+// diskInterface classifies the whole disk. sd* without a udev by-path, and
+// USB, Fibre Channel, and iSCSI paths, are unknown. scsi does not separate
+// SAS, hardware-RAID logical disks, and SATA behind an HBA.
+func diskInterface(kernelName string, paths []string) string {
+	switch {
+	case nvmeDisk.MatchString(kernelName):
+		return "nvme"
+	case virtioDisk.MatchString(kernelName):
+		return "virtio"
+	case !sdDisk.MatchString(kernelName):
+		return "unknown"
+	}
+	ata := false
+	scsi := false
+	excluded := false
+	for _, path := range paths {
+		if strings.Contains(path, "-usb-") || strings.Contains(path, "-fc-") || strings.Contains(path, "-iscsi-") {
+			excluded = true
+		}
+		if strings.Contains(path, "-ata-") {
+			ata = true
+		}
+		if strings.Contains(path, "-scsi-") || strings.Contains(path, "-sas-") {
+			scsi = true
+		}
+	}
+	if excluded || (!ata && !scsi) {
+		return "unknown"
+	}
+	if ata {
+		return "sata"
+	}
+	return "scsi"
+}
+
+func diskBusPaths(root string) map[string][]string {
+	result := map[string][]string{}
+	entries, err := os.ReadDir(filepath.Join(root, "dev", "disk", "by-path"))
+	if err != nil {
+		return result
+	}
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join(root, "dev", "disk", "by-path", entry.Name()))
+		if err != nil {
+			continue
+		}
+		name, ok := wholeDisk(filepath.Base(filepath.Clean(target)))
+		if !ok {
+			continue
+		}
+		result[name] = append(result[name], entry.Name())
 	}
 	return result
 }
