@@ -12,9 +12,16 @@
 分配关系。
 
 拥有：读取本节点 Pod/Service/EndpointSlice 解析抓取端点；按厂商 rule 归一指标名、标签和单位；
-从 kubelet 的 pod-resources 分配事实组装关系层；把本节点 CPU 型号发布到 Node 对象；采集自监控。
+从 kubelet 的 pod-resources 分配事实组装关系层；把本节点 CPU 型号发布到 Node 对象；把本节点已挂载的
+非系统盘写入 Node annotation `storage.xiaoshiai.cn/idle-disks`；采集自监控。
 
-不拥有：不持久化库存；不产出归因层；不依赖 Prometheus HTTP API 与 RecordingRule；不做告警判定。
+不拥有：不持久化库存；不产出归因层；不依赖 Prometheus HTTP API 与 RecordingRule；不做告警判定；
+不格式化、不挂载磁盘；不写 `storage.xiaoshiai.cn/disk-labels`。
+
+磁盘清单的字段契约在 `specification/ResourceMetadata.md`。`interface` 使用
+`specification/Monitoring.md` 里 `rune_node_disk_device_info` 的闭集和判定：内核整盘名加上 udev
+`by-path`，不读取 smartctl。`scsi` 不能区分 SAS、硬件 RAID 逻辑盘和 HBA 后的 SATA。没有总线路径的
+`sd*`，以及 USB、光纤通道、iSCSI，记为 `unknown`。消费方不得根据设备名自行推断接口类型。
 
 ## 2. 契约与分层
 
